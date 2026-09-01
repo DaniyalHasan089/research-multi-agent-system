@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Researcher Agent</title>
+  <meta name="description" content="Multi-agent AI research assistant. Enter a question and receive a structured academic report with PDF export." />
+  <style>
+    /* ── Reset & Base ──────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #0f1117;
+      --surface:    #1a1d27;
+      --surface2:   #22263a;
+      --border:     #2e3350;
+      --accent:     #6366f1;
+      --accent-dim: #4338ca;
+      --green:      #22c55e;
+      --yellow:     #eab308;
+      --red:        #ef4444;
+      --text:       #e2e8f0;
+      --text-dim:   #94a3b8;
+      --text-muted: #64748b;
+      --radius:     10px;
+      --font-sans:  'Inter', system-ui, sans-serif;
+      --font-mono:  'JetBrains Mono', 'Fira Code', monospace;
+    }
+
+    html { font-size: 16px; scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* ── Google Fonts ─────────────────────────────────────────── */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+    /* ── Layout ───────────────────────────────────────────────── */
+    .container {
+      width: 100%;
+      max-width: 860px;
+      padding: 0 1.5rem 4rem;
+    }
+
+    /* ── Header ───────────────────────────────────────────────── */
+    header {
+      text-align: center;
+      padding: 3.5rem 0 2.5rem;
+    }
+
+    .logo {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 1rem;
+    }
+
+    .logo-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    h1 {
+      font-size: 2.4rem;
+      font-weight: 700;
+      line-height: 1.15;
+      background: linear-gradient(135deg, #e2e8f0 0%, #a5b4fc 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 0.75rem;
+    }
+
+    .subtitle {
+      color: var(--text-dim);
+      font-size: 1rem;
+      line-height: 1.6;
+      max-width: 520px;
+      margin: 0 auto;
+    }
+
+    /* ── Query Card ───────────────────────────────────────────── */
+    .query-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .query-label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-dim);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 0.75rem;
+    }
+
+    .query-row {
+      display: flex;
+      gap: 0.75rem;
+    }
+
+    #query-input {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    #query-input:focus {
+      border-color: var(--accent);
+    }
+
+    #query-input::placeholder {
+      color: var(--text-muted);
+    }
+
+    #submit-btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 0.75rem 1.5rem;
+      font-family: var(--font-sans);
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.2s, transform 0.1s;
+    }
+
+    #submit-btn:hover:not(:disabled) {
+      background: var(--accent-dim);
+    }
+
+    #submit-btn:active:not(:disabled) {
+      transform: scale(0.97);
+    }
+
+    #submit-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* ── Pipeline Visualization ───────────────────────────────── */
+    .pipeline {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin-bottom: 1.5rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      overflow-x: auto;
+    }
+
+    .pipeline-step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.3rem;
+      flex: 1;
+      min-width: 90px;
+      position: relative;
+    }
+
+    .pipeline-step:not(:last-child)::after {
+      content: '→';
+      position: absolute;
+      right: -10px;
+      top: 12px;
+      color: var(--border);
+      font-size: 1.1rem;
+      z-index: 1;
+    }
+
+    .step-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+      background: var(--bg);
+      transition: border-color 0.3s, background 0.3s;
+    }
+
+    .step-label {
+      font-size: 0.65rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      text-align: center;
+      line-height: 1.3;
+      transition: color 0.3s;
+    }
+
+    .pipeline-step.active .step-icon {
+      border-color: var(--accent);
+      background: rgba(99, 102, 241, 0.15);
+      animation: pulse-border 1s ease-in-out infinite;
+    }
+
+    .pipeline-step.active .step-label {
+      color: var(--accent);
+    }
+
+    .pipeline-step.done .step-icon {
+      border-color: var(--green);
+      background: rgba(34, 197, 94, 0.12);
+    }
+
+    .pipeline-step.done .step-label {
+      color: var(--green);
+    }
+
+    /* ── Progress Block ───────────────────────────────────────── */
+    #progress-section {
+      display: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+
+    .progress-title {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-dim);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .progress-pct {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--accent);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .progress-bar-track {
+      height: 6px;
+      background: var(--bg);
+      border-radius: 99px;
+      overflow: hidden;
+      margin-bottom: 1.25rem;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent-dim), var(--accent));
+      border-radius: 99px;
+      width: 0%;
+      transition: width 0.5s ease;
+    }
+
+    /* ── Log Entries ──────────────────────────────────────────── */
+    .log {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .log-entry {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+      font-size: 0.82rem;
+      line-height: 1.4;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .log-time {
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      flex-shrink: 0;
+      margin-top: 0.05em;
+    }
+
+    .log-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 0.35em;
+    }
+
+    .log-dot.info   { background: var(--accent); }
+    .log-dot.ok     { background: var(--green); }
+    .log-dot.error  { background: var(--red); }
+
+    .log-msg { color: var(--text-dim); }
+
+    /* ── Report Section ───────────────────────────────────────── */
+    #report-section {
+      display: none;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .report-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface2);
+    }
+
+    .report-toolbar-left {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .report-badge {
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      background: rgba(34, 197, 94, 0.15);
+      color: var(--green);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      border-radius: 99px;
+      padding: 0.2em 0.7em;
+    }
+
+    .report-meta {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .toolbar-actions {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-dim);
+      padding: 0.4rem 0.9rem;
+      font-size: 0.8rem;
+      font-family: var(--font-sans);
+      font-weight: 500;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s, background 0.2s;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+
+    .btn-outline:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(99, 102, 241, 0.07);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      padding: 0.4rem 0.9rem;
+      font-size: 0.8rem;
+      font-family: var(--font-sans);
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+
+    .btn-primary:hover { background: var(--accent-dim); }
+
+    #report-body {
+      padding: 2rem 2.5rem;
+      max-height: 70vh;
+      overflow-y: auto;
+      line-height: 1.75;
+    }
+
+    /* ── Report Content Styles ────────────────────────────────── */
+    #report-body h1 {
+      font-size: 1.5rem;
+      color: var(--text);
+      border-bottom: 2px solid var(--accent);
+      padding-bottom: 0.5rem;
+      margin-bottom: 1.25rem;
+      background: none;
+      -webkit-text-fill-color: var(--text);
+    }
+
+    #report-body h2 {
+      font-size: 1.15rem;
+      color: #a5b4fc;
+      margin-top: 2rem;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.3rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    #report-body h3 {
+      font-size: 1rem;
+      color: var(--text-dim);
+      margin-top: 1.25rem;
+      margin-bottom: 0.5rem;
+    }
+
+    #report-body p {
+      color: var(--text-dim);
+      margin-bottom: 0.9rem;
+      font-size: 0.93rem;
+    }
+
+    #report-body ul, #report-body ol {
+      color: var(--text-dim);
+      padding-left: 1.5rem;
+      margin-bottom: 0.9rem;
+      font-size: 0.93rem;
+    }
+
+    #report-body li { margin-bottom: 0.35rem; }
+
+    #report-body strong { color: var(--text); font-weight: 600; }
+
+    #report-body a {
+      color: var(--accent);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    #report-body a:hover { color: #a5b4fc; }
+
+    #report-body code {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.1em 0.4em;
+      font-family: var(--font-mono);
+      font-size: 0.82em;
+      color: #c4b5fd;
+    }
+
+    #report-body pre {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: 6px;
+      padding: 1rem;
+      overflow-x: auto;
+      margin-bottom: 1rem;
+    }
+
+    #report-body hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 1.5rem 0;
+    }
+
+    #report-body blockquote {
+      border-left: 3px solid var(--accent);
+      padding: 0.5rem 1rem;
+      background: rgba(99,102,241,0.06);
+      border-radius: 0 6px 6px 0;
+      color: var(--text-dim);
+      font-style: italic;
+      margin: 1rem 0;
+    }
+
+    /* ── Error Banner ─────────────────────────────────────────── */
+    #error-banner {
+      display: none;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: var(--radius);
+      color: #fca5a5;
+      padding: 1rem 1.25rem;
+      font-size: 0.875rem;
+      margin-bottom: 1.5rem;
+    }
+
+    /* ── Animations ───────────────────────────────────────────── */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
+    @keyframes pulse-border {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(99,102,241,0.4); }
+      50%       { box-shadow: 0 0 0 4px rgba(99,102,241,0.1); }
+    }
+
+    /* ── Scrollbar ────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <!-- ── Header ──────────────────────────────────────────────── -->
+    <header>
+      <div class="logo">
+        <div class="logo-dot"></div>
+        Multi-Agent Research System
+      </div>
+      <h1>AI Researcher Agent</h1>
+      <p class="subtitle">
+        Ask any research question. The pipeline searches academic sources,
+        analyzes papers with AI, and delivers a structured report with PDF export.
+      </p>
+    </header>
+
+    <!-- ── Pipeline Visualization ──────────────────────────────── -->
+    <div class="pipeline" id="pipeline-viz">
+      <div class="pipeline-step" id="step-planner">
+        <div class="step-icon">🧠</div>
+        <div class="step-label">Query<br>Planner</div>
+      </div>
+      <div class="pipeline-step" id="step-researcher">
+        <div class="step-icon">🔍</div>
+        <div class="step-label">Paper<br>Researcher</div>
+      </div>
+      <div class="pipeline-step" id="step-analyzer">
+        <div class="step-icon">⚗️</div>
+        <div class="step-label">Analyzer &amp;<br>Ranker</div>
+      </div>
+      <div class="pipeline-step" id="step-writer">
+        <div class="step-icon">✍️</div>
+        <div class="step-label">Report<br>Writer</div>
+      </div>
+      <div class="pipeline-step" id="step-formatter">
+        <div class="step-icon">📄</div>
+        <div class="step-label">Formatter<br>&amp; PDF</div>
+      </div>
+    </div>
+
+    <!-- ── Query Input ──────────────────────────────────────────── -->
+    <div class="query-card">
+      <label class="query-label" for="query-input">Research Question</label>
+      <div class="query-row">
+        <input
+          id="query-input"
+          type="text"
+          placeholder="e.g. transformer attention mechanisms in natural language processing"
+          autocomplete="off"
+        />
+        <button id="submit-btn" onclick="submitQuery()">Research →</button>
+      </div>
+    </div>
+
+    <!-- ── Error Banner ─────────────────────────────────────────── -->
+    <div id="error-banner"></div>
+
+    <!-- ── Progress Section ─────────────────────────────────────── -->
+    <div id="progress-section">
+      <div class="progress-header">
+        <span class="progress-title">Pipeline Progress</span>
+        <span class="progress-pct" id="progress-pct">0%</span>
+      </div>
+      <div class="progress-bar-track">
+        <div class="progress-bar-fill" id="progress-bar"></div>
+      </div>
+      <div class="log" id="log"></div>
+    </div>
+
+    <!-- ── Report Section ───────────────────────────────────────── -->
+    <div id="report-section">
+      <div class="report-toolbar">
+        <div class="report-toolbar-left">
+          <span class="report-badge">✓ Complete</span>
+          <span class="report-meta" id="report-meta"></span>
+        </div>
+        <div class="toolbar-actions">
+          <button class="btn-outline" onclick="newSearch()">← New Search</button>
+          <button class="btn-primary" id="pdf-btn" onclick="downloadPDF()">↓ Download PDF</button>
+        </div>
+      </div>
+      <div id="report-body"></div>
+    </div>
+
+  </div>
+
+  <script>
+    const API_BASE = '';  // Same origin — FastAPI serves both the HTML and the API
+
+    let currentPdfId = null;
+    let currentEventSource = null;
+
+    // ── Pipeline step stage map ──────────────────────────────────
+    const STAGE_STEP_MAP = {
+      planning:       'planner',
+      query_planned:  'planner',
+      searching:      'researcher',
+      papers_found:   'researcher',
+      analyzing:      'analyzer',
+      analyzed:       'analyzer',
+      writing:        'writer',
+      report_written: 'writer',
+      formatting:     'formatter',
+      complete:       'formatter',
+    };
+
+    const STAGE_DOT_CLASS = {
+      query_planned:  'ok',
+      papers_found:   'ok',
+      analyzed:       'ok',
+      report_written: 'ok',
+      complete:       'ok',
+      error:          'error',
+    };
+
+    // ── Helpers ──────────────────────────────────────────────────
+    function setProgress(pct) {
+      document.getElementById('progress-bar').style.width = pct + '%';
+      document.getElementById('progress-pct').textContent = pct + '%';
+    }
+
+    function addLog(message, dotClass = 'info') {
+      const log = document.getElementById('log');
+      const now = new Date();
+      const time = now.toTimeString().slice(0, 8);
+
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+      entry.innerHTML = `
+        <span class="log-time">${time}</span>
+        <span class="log-dot ${dotClass}"></span>
+        <span class="log-msg">${message}</span>
+      `;
+      log.appendChild(entry);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function setStepState(stepId, state) {
+      const el = document.getElementById('step-' + stepId);
+      if (!el) return;
+      el.classList.remove('active', 'done');
+      if (state) el.classList.add(state);
+    }
+
+    function resetPipelineSteps() {
+      ['planner', 'researcher', 'analyzer', 'writer', 'formatter'].forEach(id => {
+        setStepState(id, null);
+      });
+    }
+
+    function markStepsDone(upToStep) {
+      const order = ['planner', 'researcher', 'analyzer', 'writer', 'formatter'];
+      const idx = order.indexOf(upToStep);
+      for (let i = 0; i <= idx; i++) {
+        setStepState(order[i], 'done');
+      }
+    }
+
+    function showError(msg) {
+      const banner = document.getElementById('error-banner');
+      banner.textContent = '⚠ ' + msg;
+      banner.style.display = 'block';
+    }
+
+    function hideError() {
+      document.getElementById('error-banner').style.display = 'none';
+    }
+
+    // ── Marked.js CDN for Markdown rendering ─────────────────────
+    // Dynamically loaded only when needed
+    function loadMarked(cb) {
+      if (window.marked) { cb(); return; }
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/marked/marked.min.js';
+      s.onload = cb;
+      document.head.appendChild(s);
+    }
+
+    // ── Main submit function ─────────────────────────────────────
+    function submitQuery() {
+      const query = document.getElementById('query-input').value.trim();
+      if (!query) {
+        showError('Please enter a research question.');
+        return;
+      }
+
+      hideError();
+      document.getElementById('submit-btn').disabled = true;
+      document.getElementById('progress-section').style.display = 'block';
+      document.getElementById('report-section').style.display = 'none';
+      document.getElementById('log').innerHTML = '';
+      setProgress(0);
+      resetPipelineSteps();
+      currentPdfId = null;
+
+      addLog(`Starting pipeline for: "${query.substring(0, 60)}${query.length > 60 ? '...' : ''}"`, 'info');
+
+      // POST to kick off the pipeline, then connect SSE
+      fetch(`${API_BASE}/research`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query }),
+      }).then(response => {
+        if (!response.ok) {
+          return response.json().then(e => { throw new Error(e.detail || 'Server error'); });
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        function read() {
+          reader.read().then(({ done, value }) => {
+            if (done) return;
+            buffer += decoder.decode(value, { stream: true });
+
+            // SSE lines start with "data: "
+            const lines = buffer.split('\n');
+            buffer = lines.pop(); // keep incomplete line
+
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const event = JSON.parse(line.slice(6));
+                  handleSSEEvent(event);
+                } catch (e) {
+                  // Ignore parse errors on keep-alive lines
+                }
+              }
+            }
+            read();
+          }).catch(err => {
+            showError('Connection lost: ' + err.message);
+            document.getElementById('submit-btn').disabled = false;
+          });
+        }
+        read();
+      }).catch(err => {
+        showError(err.message || 'Failed to connect to the server.');
+        document.getElementById('submit-btn').disabled = false;
+      });
+    }
+
+    // ── SSE Event Handler ────────────────────────────────────────
+    function handleSSEEvent(event) {
+      const { stage, progress, message, data } = event;
+      const dotClass = STAGE_DOT_CLASS[stage] || 'info';
+
+      setProgress(progress);
+      addLog(message, dotClass);
+
+      // Update pipeline step visualization
+      const stepId = STAGE_STEP_MAP[stage];
+      if (stepId) {
+        if (stage === 'complete' || dotClass === 'ok') {
+          markStepsDone(stepId);
+        } else {
+          setStepState(stepId, 'active');
+        }
+      }
+
+      if (stage === 'complete' && data) {
+        currentPdfId = data.pdf_id || null;
+        renderReport(data);
+      }
+
+      if (stage === 'error') {
+        showError(message);
+        document.getElementById('submit-btn').disabled = false;
+      }
+    }
+
+    // ── Render Report ────────────────────────────────────────────
+    function renderReport(data) {
+      const section = document.getElementById('report-section');
+      const body = document.getElementById('report-body');
+      const meta = document.getElementById('report-meta');
+
+      meta.textContent = `${data.paper_count || 0} papers · ${data.domain || ''}`;
+
+      if (!currentPdfId) {
+        document.getElementById('pdf-btn').style.display = 'none';
+      }
+
+      // Use the report_html directly from the server
+      body.innerHTML = data.report_html || '<p>No report content received.</p>';
+
+      // Make all links open in a new tab
+      body.querySelectorAll('a').forEach(a => {
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+      });
+
+      section.style.display = 'block';
+      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.getElementById('submit-btn').disabled = false;
+    }
+
+    // ── Download PDF ─────────────────────────────────────────────
+    function downloadPDF() {
+      if (!currentPdfId) {
+        showError('No PDF available. Run a research query first.');
+        return;
+      }
+      window.location.href = `${API_BASE}/download/${currentPdfId}`;
+    }
+
+    // ── New Search ───────────────────────────────────────────────
+    function newSearch() {
+      document.getElementById('report-section').style.display = 'none';
+      document.getElementById('progress-section').style.display = 'none';
+      document.getElementById('query-input').value = '';
+      document.getElementById('query-input').focus();
+      resetPipelineSteps();
+      hideError();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // ── Enter key submits ────────────────────────────────────────
+    document.getElementById('query-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') submitQuery();
+    });
+  </script>
+</body>
+</html>

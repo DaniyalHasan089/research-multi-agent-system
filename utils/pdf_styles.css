@@ -1,0 +1,186 @@
+/* ============================================================
+   PDF Stylesheet — used by WeasyPrint (Agent 5: Formatter)
+   Produces clean, professional research report PDFs.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Merriweather:ital,wght@0,400;0,700;1,400&display=swap');
+
+/* ── Page Setup ────────────────────────────────────────────── */
+@page {
+    size: A4;
+    margin: 2.5cm 2cm 2.5cm 2cm;
+
+    @bottom-right {
+        content: "Page " counter(page) " of " counter(pages);
+        font-family: 'Inter', sans-serif;
+        font-size: 9pt;
+        color: #6b7280;
+    }
+
+    @top-right {
+        content: "AI Research Report";
+        font-family: 'Inter', sans-serif;
+        font-size: 9pt;
+        color: #6b7280;
+    }
+}
+
+/* ── Base Typography ───────────────────────────────────────── */
+body {
+    font-family: 'Merriweather', Georgia, serif;
+    font-size: 11pt;
+    line-height: 1.75;
+    color: #1f2937;
+    background: #ffffff;
+}
+
+/* ── Headings ──────────────────────────────────────────────── */
+h1, h2, h3, h4, h5, h6 {
+    font-family: 'Inter', sans-serif;
+    font-weight: 700;
+    color: #111827;
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+    page-break-after: avoid;
+}
+
+h1 {
+    font-size: 22pt;
+    border-bottom: 3px solid #4f46e5;
+    padding-bottom: 0.3em;
+    color: #1e1b4b;
+}
+
+h2 {
+    font-size: 16pt;
+    border-bottom: 1px solid #e5e7eb;
+    padding-bottom: 0.2em;
+    color: #1e1b4b;
+}
+
+h3 {
+    font-size: 13pt;
+    color: #312e81;
+}
+
+h4 {
+    font-size: 11pt;
+    color: #4338ca;
+}
+
+/* ── Paragraphs ────────────────────────────────────────────── */
+p {
+    margin: 0.6em 0 0.8em;
+    text-align: justify;
+}
+
+/* ── Links ─────────────────────────────────────────────────── */
+a {
+    color: #4f46e5;
+    text-decoration: underline;
+}
+
+/* ── Lists ─────────────────────────────────────────────────── */
+ul, ol {
+    margin: 0.5em 0 0.8em 1.5em;
+    padding: 0;
+}
+
+li {
+    margin-bottom: 0.3em;
+}
+
+/* ── Inline Code ───────────────────────────────────────────── */
+code {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 9.5pt;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 3px;
+    padding: 0.1em 0.4em;
+    color: #1f2937;
+}
+
+/* ── Code Blocks ───────────────────────────────────────────── */
+pre {
+    background: #f8f9fa;
+    border: 1px solid #e5e7eb;
+    border-left: 4px solid #4f46e5;
+    border-radius: 4px;
+    padding: 0.8em 1em;
+    font-size: 9pt;
+    line-height: 1.5;
+    overflow-x: auto;
+    page-break-inside: avoid;
+}
+
+pre code {
+    background: none;
+    border: none;
+    padding: 0;
+}
+
+/* ── Blockquotes ───────────────────────────────────────────── */
+blockquote {
+    margin: 1em 0;
+    padding: 0.5em 1em;
+    border-left: 4px solid #6366f1;
+    background: #eef2ff;
+    color: #374151;
+    font-style: italic;
+    border-radius: 0 4px 4px 0;
+}
+
+/* ── Tables ────────────────────────────────────────────────── */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1em 0;
+    font-family: 'Inter', sans-serif;
+    font-size: 10pt;
+    page-break-inside: avoid;
+}
+
+thead {
+    background: #4f46e5;
+    color: #ffffff;
+}
+
+th {
+    padding: 0.6em 0.8em;
+    text-align: left;
+    font-weight: 600;
+}
+
+td {
+    padding: 0.5em 0.8em;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+tr:nth-child(even) td {
+    background: #f9fafb;
+}
+
+/* ── Horizontal Rules ──────────────────────────────────────── */
+hr {
+    border: none;
+    border-top: 2px solid #e5e7eb;
+    margin: 1.5em 0;
+}
+
+/* ── Citations ─────────────────────────────────────────────── */
+sup {
+    font-size: 8pt;
+    color: #4f46e5;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+}
+
+/* ── Page Break Helpers ────────────────────────────────────── */
+.page-break {
+    page-break-before: always;
+}
+
+h2, h3 {
+    page-break-before: auto;
+}
