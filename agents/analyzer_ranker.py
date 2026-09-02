@@ -24,18 +24,19 @@ load_dotenv()
 
 TOP_K = int(os.getenv("TOP_K_PAPERS", "10"))
 
-SYSTEM_PROMPT = """You are an expert academic paper analyst. You will be given the title, URL, and abstract/content of a research paper. Your job is to extract structured insights and rate the paper's relevance to a given research question.
+SYSTEM_PROMPT = """You are an expert academic paper analyst. You will be given the title, URL, and abstract/content of a research paper. Your job is to extract detailed structured insights and rate the paper's relevance to a given research question.
 
 Respond ONLY with a valid JSON object in this exact format:
 {
-  "problem": "<1-2 sentences: what problem does this paper address?>",
-  "methodology": "<1-2 sentences: what methods or approaches does it use?>",
-  "findings": "<2-3 sentences: what are the key results or contributions?>",
-  "limitations": "<1 sentence: what are the main limitations or gaps?>",
+  "summary": "<4-5 sentence plain-language summary of what this paper is about, its core contributions, and why it matters>",
+  "problem": "<2-3 sentences: what specific problem or gap in the literature does this paper address? Include context on why this problem is important.>",
+  "methodology": "<2-3 sentences: what specific methods, models, datasets, or experimental setups does it use? Be precise about techniques.>",
+  "findings": "<3-4 sentences: what are the key quantitative or qualitative results? Include specific numbers or benchmarks where available.>",
+  "limitations": "<2 sentences: what are the main limitations, assumptions, or open questions left by this paper?>",
   "relevance_score": <integer from 0 to 10, where 10 is perfectly relevant to the query>
 }
 
-Be concise, accurate, and objective. Do not include text outside the JSON."""
+Be thorough, accurate, and objective. Use specific details from the paper content. Do not include text outside the JSON."""
 
 
 def _analyze_paper(llm, paper: dict, user_query: str, index: int, total: int) -> dict | None:
@@ -44,8 +45,8 @@ def _analyze_paper(llm, paper: dict, user_query: str, index: int, total: int) ->
     url = paper.get("url", "")
     content = paper.get("content", "")
 
-    # Truncate very long content to stay within context limits
-    max_content_chars = 3000
+    # Increase content window for richer extractions
+    max_content_chars = 5000
     if len(content) > max_content_chars:
         content = content[:max_content_chars] + "... [truncated]"
 
@@ -80,6 +81,9 @@ Please analyze this paper and return your assessment as JSON."""
         analysis["url"] = url
         # Ensure relevance_score is numeric
         analysis["relevance_score"] = float(analysis.get("relevance_score", 0))
+        # Ensure summary exists (fallback to findings if missing)
+        if not analysis.get("summary"):
+            analysis["summary"] = analysis.get("findings", "No summary available.")
         return analysis
 
     except Exception as e:

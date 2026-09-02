@@ -20,6 +20,7 @@ load_dotenv()
 
 # Academic sources to bias results toward
 ACADEMIC_DOMAINS = [
+    # Original
     "arxiv.org",
     "pubmed.ncbi.nlm.nih.gov",
     "semanticscholar.org",
@@ -34,10 +35,54 @@ ACADEMIC_DOMAINS = [
     "ssrn.com",
     "ncbi.nlm.nih.gov",
     "dl.acm.org",
+    "scholar.google.com",
+
+    # Multidisciplinary / General
+    "researchgate.net",
+    "academia.edu",
+    "jstor.org",
+    "sciencedirect.com",
+    "onlinelibrary.wiley.com",
+    "tandfonline.com",
+    "sagepub.com",
+    "zenodo.org",
+
+    # Open Access
+    "doaj.org",
+    "unpaywall.org",
+    "openalex.org",
+    "core.ac.uk",
+    "openaire.eu",
+
+    # Domain-Specific
+    "philpapers.org",
+    "ideas.repec.org",
+    "nber.org",
+    "psyarxiv.com",
+    "chemrxiv.org",
+    "eartharxiv.org",
+    "essoar.org",
+    "engrxiv.org",
+    "osf.io",
+    "hal.science",
+
+    # Institutional / Government
+    "eric.ed.gov",
+    "ncbi.nlm.nih.gov/pmc",
+    "dtic.mil",
+    "rand.org",
+    "brookings.edu",
+
+    # Citation & Discovery
+    "connectedpapers.com",
+    "paperswithcode.com",
+    "scite.ai",
+    "dimensions.ai",
+    "lens.org",
 ]
 
 # Max raw candidates passed to the Analyzer (before top-K filtering)
-MAX_CANDIDATES = 30
+MAX_CANDIDATES = 40
 
 
 def run(state: ResearchState) -> ResearchState:
@@ -64,7 +109,7 @@ def run(state: ResearchState) -> ResearchState:
             response = client.search(
                 query=query,
                 search_depth="advanced",
-                max_results=10,
+                max_results=15,
                 include_domains=ACADEMIC_DOMAINS,
             )
             results = response.get("results", [])

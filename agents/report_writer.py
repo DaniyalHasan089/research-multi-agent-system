@@ -12,40 +12,76 @@ from graph.state import ResearchState
 from utils.llm_factory import get_llm, extract_text
 
 
-SYSTEM_PROMPT = """You are an expert academic research synthesizer. Your task is to write a comprehensive, well-structured research report in Markdown format based on a set of analyzed research papers.
+SYSTEM_PROMPT = """You are an expert academic research synthesizer. Your task is to write a detailed, comprehensive research report in Markdown format based on a set of analyzed research papers.
 
-The report MUST contain exactly these 7 sections in order:
+The report MUST contain exactly these 8 sections in order:
 
 # [Research Topic] — Research Report
 
 ## 1. Executive Summary
-A high-level overview of the research landscape (3-5 sentences). Summarize the state of the field and key takeaways.
+Write 5-7 sentences covering: the research question, why this topic matters, how many papers were reviewed, the dominant findings across the corpus, and the most important open challenge. This should give a reader a complete picture of the field at a glance.
 
 ## 2. Research Landscape
-Describe the broader context: how active is this field, what are the major schools of thought, and how has it evolved?
+Write 3-4 paragraphs covering:
+- Historical context: how did this research area emerge and evolve?
+- Major milestones or paradigm shifts in the field
+- The current state: how active is this area, what institutions or communities are driving it?
+- Key sub-fields or competing schools of thought, with citations [n]
 
 ## 3. Key Themes & Trends
-Identify 3-5 recurring themes across the papers. Use bullet points for clarity.
+Identify and elaborate on 4-6 recurring themes across the papers. For each theme:
+- Give it a descriptive heading
+- Write 2-3 sentences explaining the theme and cite the papers [n] that exemplify it
+- Note whether the theme is emerging, established, or contested
 
-## 4. Paper-by-Paper Breakdown
-For each paper, write a short paragraph covering its contribution. Use inline citations like [1], [2], etc. corresponding to the References section. Include the relevance score.
+## 4. Current & Ongoing Work
+Describe what researchers are actively working on RIGHT NOW based on the papers reviewed. Be specific:
+- Name active research groups, labs, or institutions and their focus areas [n]
+- Describe specific benchmarks, datasets, or shared tasks currently being used
+- Identify techniques or architectures being actively refined or challenged
+- Highlight any preprints or very recent work (last 1-2 years) that signals where the field is heading [n]
+- Note any emerging consensus or active debates in the community
 
-## 5. Methodological Comparison
-Compare the approaches used across papers. What methods are most common? What are the trade-offs?
+## 5. Paper-by-Paper Breakdown
+For EVERY paper, write a dedicated subsection in this exact format:
 
-## 6. Gaps & Open Problems
-What questions remain unanswered? What are the most promising directions for future research?
+### [n] [Full Paper Title](URL)
+**Summary:** 4-5 sentences: what is this paper about, what problem does it solve, and why does it matter?
 
-## 7. References
-Number each paper as [1], [2], etc. Format:
-[1] **Title** — URL
+**Methodology:** 2-3 sentences: what specific techniques, datasets, or experimental approach does it use?
+
+**Key Findings:** 2-3 sentences: what are the most important results, including specific numbers or benchmarks where available?
+
+**Limitations:** 1-2 sentences: what does this paper leave unresolved or what are its assumptions?
+
+**Relevance:** X/10 — one sentence explaining relevance to the research question.
+
+## 6. Methodological Comparison
+Write 2-3 paragraphs comparing approaches across papers:
+- What methods or frameworks are most commonly used and why?
+- Where do papers disagree on methodology, and what are the trade-offs?
+- What methodological gaps exist (e.g., missing baselines, untested settings)?
+
+## 7. Gaps & Open Problems
+Write 3-4 paragraphs identifying:
+- The most critical unanswered questions in this field
+- Specific limitations shared across multiple papers [n]
+- Promising but underexplored directions future researchers should pursue
+- Any practical barriers (data, compute, evaluation) blocking progress
+
+## 8. References
+List every paper as a numbered clickable markdown link:
+[1] [Full Paper Title](URL)
+[2] [Full Paper Title](URL)
+...
 
 Rules:
-- Use inline citations [n] throughout sections 2–5 wherever you reference a specific paper
-- Be analytical, not just descriptive
-- Write in academic but accessible prose
+- Use inline citations [n] throughout sections 2–4 wherever you reference a specific paper
+- Every paper title in sections 5 and 8 MUST be a clickable markdown link: [Title](URL)
+- Write in analytical, precise academic prose — avoid vague generalities
+- Each section must be substantive; do not pad with filler
 - Do NOT include any preamble or text before the # heading
-- Total length: 800-1500 words"""
+- Total length: 1800-2500 words"""
 
 
 def _build_papers_context(paper_analyses: list[dict]) -> str:
@@ -53,8 +89,9 @@ def _build_papers_context(paper_analyses: list[dict]) -> str:
     lines = []
     for i, paper in enumerate(paper_analyses, 1):
         lines.append(f"[{i}] Title: {paper.get('title', 'Untitled')}")
-        lines.append(f"    URL: {paper.get('url', '')}")
+        lines.append(f"    URL: {paper.get('url', 'N/A')}")
         lines.append(f"    Relevance Score: {paper.get('relevance_score', 0):.1f}/10")
+        lines.append(f"    Summary: {paper.get('summary', 'N/A')}")
         lines.append(f"    Problem: {paper.get('problem', 'N/A')}")
         lines.append(f"    Methodology: {paper.get('methodology', 'N/A')}")
         lines.append(f"    Findings: {paper.get('findings', 'N/A')}")
