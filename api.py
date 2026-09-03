@@ -170,6 +170,7 @@ async def run_research(request: ResearchRequest):
                 "Research complete! Your report is ready.",
                 data={
                     "report_html": state.get("report_html", ""),
+                    "report_markdown": state.get("report_markdown", ""),
                     "pdf_id": pdf_id,
                     "domain": state.get("domain", ""),
                     "paper_count": analyzed_count,
