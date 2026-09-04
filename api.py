@@ -1,23 +1,14 @@
-"""
-FastAPI Application — API endpoints + static file serving.
-
-Endpoints:
-  GET  /                    → Serves static/index.html
-  POST /research            → Runs the full pipeline; streams SSE progress events
-  GET  /download/{pdf_id}   → Serves a generated PDF for download
-
-SSE Event Schema:
-  { "stage": str, "progress": int, "message": str, "data": dict }
-"""
-
 import asyncio
 import json
 import os
+import re
 import uuid
+import uvicorn
 from pathlib import Path
+from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -173,10 +164,25 @@ async def run_research(request: ResearchRequest):
     return EventSourceResponse(event_generator())
 
 
+def _format_pdf_filename(topic: Optional[str]) -> str:
+    """Format a safe, clean filename reflecting the research topic."""
+    if not topic:
+        return "research_report.pdf"
+    # Keep only alphanumeric characters, spaces, hyphens, and underscores
+    clean = re.sub(r"[^\w\s-]", "", topic).strip()
+    clean = re.sub(r"[-\s]+", "_", clean)
+    clean = clean[:60].strip("_")
+    if not clean:
+        return "research_report.pdf"
+    if not clean.lower().endswith("report"):
+        clean = f"{clean}_report"
+    return f"{clean}.pdf"
+
+
 @app.get("/download/{pdf_id}")
-async def download_pdf(pdf_id: str):
+async def download_pdf(pdf_id: str, topic: Optional[str] = Query(default=None)):
     """
-    Serve a previously generated PDF by ID.
+    Serve a previously generated PDF by ID with a topic-reflective filename.
 
     The pdf_id is the UUID stem of the file (no extension).
     Files are stored in the system temp directory.
@@ -191,8 +197,32 @@ async def download_pdf(pdf_id: str):
     if not pdf_path.exists():
         raise HTTPException(status_code=404, detail="PDF not found. It may have expired.")
 
+    # Determine topic from query param or sidecar metadata
+    resolved_topic = topic
+    if not resolved_topic:
+        meta_path = get_pdf_dir() / f"{pdf_id}.json"
+        if meta_path.exists():
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                resolved_topic = meta.get("topic")
+            except Exception:
+                pass
+
+    filename = _format_pdf_filename(resolved_topic)
+
     return FileResponse(
         path=str(pdf_path),
         media_type="application/pdf",
-        filename="research_report.pdf",
+        filename=filename,
+    )
+
+import uvicorn
+
+if __name__ == "__main__":
+    uvicorn.run(
+        "api:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,          
+        reload_dirs=["."],    
     )

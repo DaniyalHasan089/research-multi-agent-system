@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-TOP_K = int(os.getenv("TOP_K_PAPERS", "10"))
+TOP_K = int(os.getenv("TOP_K_PAPERS"))
 
 SYSTEM_PROMPT = """You are an expert academic paper analyst. You will be given the title, URL, and abstract/content of a research paper. Your job is to extract detailed structured insights and rate the paper's relevance to a given research question.
 

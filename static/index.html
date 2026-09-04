@@ -1406,6 +1406,7 @@
 
     let currentPdfId = null;
     let currentMarkdown = '';
+    let currentTopic = '';
     let timerInterval = null;
     let startTime = null;
 
@@ -1577,6 +1578,7 @@
       document.getElementById('pipeline-status-text').textContent = 'Execution Active';
       currentPdfId = null;
       currentMarkdown = '';
+      currentTopic = query;
 
       startTimer();
       addLog(`Initiated research pipeline: "${query}"`, 'START', 'info');
@@ -1644,6 +1646,7 @@
       if (stage === 'complete' && data) {
         currentPdfId = data.pdf_id || null;
         currentMarkdown = data.report_markdown || '';
+        if (data.query) currentTopic = data.query;
         renderReport(data);
         finishRun();
       }
@@ -1734,7 +1737,8 @@
         showError('No compiled PDF found. Please run a research query.');
         return;
       }
-      window.location.href = `${API_BASE}/download/${currentPdfId}`;
+      const topicParam = currentTopic ? `?topic=${encodeURIComponent(currentTopic)}` : '';
+      window.location.href = `${API_BASE}/download/${currentPdfId}${topicParam}`;
       showToast('Downloading PDF research dossier...');
     }
 

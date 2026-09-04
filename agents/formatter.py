@@ -232,6 +232,16 @@ def run(state: ResearchState) -> ResearchState:
             size_kb = os.path.getsize(pdf_output) / 1024
             print(f"[Formatter] ✓ PDF saved ({size_kb:.1f} KB)")
             pdf_path = pdf_output
+
+            meta_output = _PDF_DIR / f"{pdf_id}.json"
+            try:
+                import json
+                meta_output.write_text(
+                    json.dumps({"topic": state.get("user_query", "")}, ensure_ascii=False),
+                    encoding="utf-8"
+                )
+            except Exception as e:
+                print(f"[Formatter] ⚠ Could not save PDF metadata: {e}")
         else:
             print("[Formatter] PDF generation failed — HTML report still available")
     else:
