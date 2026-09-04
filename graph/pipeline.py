@@ -27,9 +27,9 @@ def _node_paper_researcher(state: ResearchState) -> ResearchState:
     return paper_researcher.run(state)
 
 
-def _node_analyzer_ranker(state: ResearchState) -> ResearchState:
-    """Node 3: Analyze each paper with LLM, score, return top-K."""
-    return analyzer_ranker.run(state)
+async def _node_analyzer_ranker(state: ResearchState) -> ResearchState:
+    """Node 3: Concurrently analyze each paper with LLM, score, return top-K."""
+    return await analyzer_ranker.run(state)
 
 
 def _node_report_writer(state: ResearchState) -> ResearchState:

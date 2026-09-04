@@ -75,11 +75,8 @@ async def run_research(request: ResearchRequest):
     """
     Run the full 5-agent research pipeline and stream SSE progress events.
 
-    Each event is a JSON object:
-      { stage, progress, message, data? }
-
-    The final event at progress=100 includes:
-      data: { report_html, pdf_id, domain, paper_count }
+    Uses LangGraph's native astream() with stream_mode="updates". As each
+    node in the DAG completes, an SSE update is yielded immediately to the UI.
     """
     query = request.query.strip()
     if not query:
@@ -92,91 +89,80 @@ async def run_research(request: ResearchRequest):
         from agents.formatter import get_pdf_dir
 
         state: ResearchState = {"user_query": query}
+        accumulated_state: dict = dict(state)
 
         try:
-            # ── Stage 1: Query Planner ────────────────────────────────────────
+            # Emit initial planning event
             yield _sse_event(
-                "planning", 5, f"Planning search strategy for: \"{query[:60]}\""
-            )
-            await asyncio.sleep(0)  # Yield control to event loop
-
-            # Run the pipeline node by node so we can emit progress between nodes
-            import agents.query_planner as qp
-            state = await asyncio.to_thread(qp.run, state)
-
-            yield _sse_event(
-                "query_planned", 10,
-                f"Domain: {state['domain']} — Generated {len(state['search_queries'])} search queries"
+                "planning", 5, f"Planning research strategy for: \"{query[:60]}\""
             )
             await asyncio.sleep(0)
 
-            # ── Stage 2: Paper Researcher ─────────────────────────────────────
-            yield _sse_event("searching", 15, "Searching academic sources via Tavily...")
-            await asyncio.sleep(0)
+            # Native LangGraph async streaming execution
+            async for update in pipeline.astream(state, stream_mode="updates"):
+                for node_name, node_output in update.items():
+                    accumulated_state.update(node_output)
 
-            import agents.paper_researcher as pr
-            state = await asyncio.to_thread(pr.run, state)
+                    if node_name == "query_planner":
+                        domain = accumulated_state.get("domain", "other")
+                        queries = accumulated_state.get("search_queries", [])
+                        yield _sse_event(
+                            "query_planned", 15,
+                            f"Domain: {domain.upper()} — Generated {len(queries)} search angles"
+                        )
+                        await asyncio.sleep(0)
+                        yield _sse_event("searching", 20, f"Searching {domain} academic repositories via Tavily...")
+                        await asyncio.sleep(0)
 
-            paper_count = len(state.get("clean_papers", []))
-            yield _sse_event(
-                "papers_found", 30,
-                f"Found {paper_count} relevant papers after filtering and deduplication"
-            )
-            await asyncio.sleep(0)
+                    elif node_name == "paper_researcher":
+                        papers = accumulated_state.get("clean_papers", [])
+                        yield _sse_event(
+                            "papers_found", 35,
+                            f"Selected {len(papers)} balanced candidate papers across queries"
+                        )
+                        await asyncio.sleep(0)
+                        yield _sse_event("analyzing", 40, f"Concurrently analyzing {len(papers)} papers with AI...")
+                        await asyncio.sleep(0)
 
-            # ── Stage 3: Analyzer & Ranker ────────────────────────────────────
-            yield _sse_event(
-                "analyzing", 35,
-                f"Analyzing {paper_count} papers with AI — this is the longest step..."
-            )
-            await asyncio.sleep(0)
+                    elif node_name == "analyzer_ranker":
+                        analyses = accumulated_state.get("paper_analyses", [])
+                        yield _sse_event(
+                            "analyzed", 70,
+                            f"Analyzed and ranked top {len(analyses)} papers by relevance"
+                        )
+                        await asyncio.sleep(0)
+                        yield _sse_event("writing", 75, "Synthesizing research dossier with strict evidence grounding...")
+                        await asyncio.sleep(0)
 
-            import agents.analyzer_ranker as ar
-            state = await asyncio.to_thread(ar.run, state)
+                    elif node_name == "report_writer":
+                        report_md = accumulated_state.get("report_markdown", "")
+                        words = len(report_md.split())
+                        yield _sse_event(
+                            "report_written", 90,
+                            f"Report synthesized ({words} words across 8 sections)"
+                        )
+                        await asyncio.sleep(0)
+                        yield _sse_event("formatting", 93, "Generating PDF & HTML dossier...")
+                        await asyncio.sleep(0)
 
-            analyzed_count = len(state.get("paper_analyses", []))
-            yield _sse_event(
-                "analyzed", 65,
-                f"Analyzed and ranked {analyzed_count} papers by relevance"
-            )
-            await asyncio.sleep(0)
+                    elif node_name == "formatter":
+                        pdf_path = accumulated_state.get("pdf_path", "")
+                        pdf_id = Path(pdf_path).stem if pdf_path else ""
+                        analyzed_count = len(accumulated_state.get("paper_analyses", []))
 
-            # ── Stage 4: Report Writer ────────────────────────────────────────
-            yield _sse_event("writing", 70, "Synthesizing findings into a structured report...")
-            await asyncio.sleep(0)
-
-            import agents.report_writer as rw
-            state = await asyncio.to_thread(rw.run, state)
-
-            yield _sse_event(
-                "report_written", 90,
-                f"Report written ({len(state['report_markdown'].split())} words)"
-            )
-            await asyncio.sleep(0)
-
-            # ── Stage 5: Formatter ────────────────────────────────────────────
-            yield _sse_event("formatting", 92, "Generating PDF...")
-            await asyncio.sleep(0)
-
-            import agents.formatter as fmt
-            state = await asyncio.to_thread(fmt.run, state)
-
-            # Extract PDF ID from path
-            pdf_path = state.get("pdf_path", "")
-            pdf_id = Path(pdf_path).stem if pdf_path else ""
-
-            yield _sse_event(
-                "complete", 100,
-                "Research complete! Your report is ready.",
-                data={
-                    "report_html": state.get("report_html", ""),
-                    "report_markdown": state.get("report_markdown", ""),
-                    "pdf_id": pdf_id,
-                    "domain": state.get("domain", ""),
-                    "paper_count": analyzed_count,
-                    "query": query,
-                }
-            )
+                        yield _sse_event(
+                            "complete", 100,
+                            "Research complete! Your report is ready.",
+                            data={
+                                "report_html": accumulated_state.get("report_html", ""),
+                                "report_markdown": accumulated_state.get("report_markdown", ""),
+                                "pdf_id": pdf_id,
+                                "domain": accumulated_state.get("domain", ""),
+                                "paper_count": analyzed_count,
+                                "query": query,
+                            }
+                        )
+                        await asyncio.sleep(0)
 
         except Exception as e:
             yield _sse_event(

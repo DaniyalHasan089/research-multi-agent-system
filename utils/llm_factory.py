@@ -1,13 +1,3 @@
-"""
-LLM Factory — returns the correct LangChain chat model based on the
-LLM_PROVIDER environment variable. All three LLM agents import from
-here so that switching providers requires only a single .env change.
-
-Supported providers:
-  - gemini  → Google Gemini Flash (default)
-  - openai  → OpenAI GPT-4o-mini (lightweight) or GPT-4o (heavy tasks)
-"""
-
 import os
 from dotenv import load_dotenv
 
@@ -47,13 +37,19 @@ def _get_gemini(task: str):
     if not api_key:
         raise EnvironmentError("GOOGLE_API_KEY is not set in the environment.")
 
-    # Use the same flash model for all tasks — it's fast and cost-effective
-    model_name = "gemini-3.1-flash-lite"
+    # Allow task-based model tiering via env vars
+    default_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    if task == "heavy":
+        model_name = os.getenv("GEMINI_HEAVY_MODEL", default_model)
+    else:
+        model_name = os.getenv("GEMINI_LIGHT_MODEL", default_model)
+
+    temp = float(os.getenv("LLM_TEMPERATURE", "0.2"))
 
     return ChatGoogleGenerativeAI(
         model=model_name,
         google_api_key=api_key,
-        temperature=0.7,
+        temperature=temp,
     )
 
 
@@ -66,12 +62,16 @@ def _get_openai(task: str):
 
     # Light tasks → gpt-4o-mini (fast, cheap)
     # Heavy tasks → gpt-4o (better reasoning for report writing)
-    model_name = "gpt-4o" if task == "heavy" else "gpt-4o-mini"
+    default_heavy = os.getenv("OPENAI_HEAVY_MODEL", "gpt-4o")
+    default_light = os.getenv("OPENAI_LIGHT_MODEL", "gpt-4o-mini")
+    model_name = default_heavy if task == "heavy" else default_light
+
+    temp = float(os.getenv("LLM_TEMPERATURE", "0.2"))
 
     return ChatOpenAI(
         model=model_name,
         openai_api_key=api_key,
-        temperature=0.2,
+        temperature=temp,
     )
 
 

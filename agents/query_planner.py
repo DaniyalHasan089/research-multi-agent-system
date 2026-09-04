@@ -5,6 +5,9 @@ Takes the user's natural-language query and:
   1. Classifies the research domain (cs, medicine, physics, etc.)
   2. Expands the query into 5 targeted academic search strings
 
+Includes resilient clamp/pad and deterministic fallback logic to ensure
+the pipeline never hard-crashes on query count or minor JSON malformations.
+
 Output is written to ResearchState: domain, search_queries
 """
 
@@ -39,6 +42,18 @@ Respond ONLY with a valid JSON object in this exact format:
 Do not include any text outside the JSON object."""
 
 
+def _fallback_queries(user_query: str) -> list[str]:
+    """Generate 5 deterministic academic queries if the LLM output fails to parse."""
+    base = user_query.strip()
+    return [
+        f"{base} survey review",
+        f"{base} methodology architecture",
+        f"{base} state of the art benchmarks",
+        f"{base} empirical analysis evaluation",
+        f"{base} open challenges future directions",
+    ]
+
+
 def run(state: ResearchState) -> ResearchState:
     """
     Query Planner node — expands user_query into domain + 5 search strings.
@@ -49,33 +64,52 @@ def run(state: ResearchState) -> ResearchState:
     Returns:
         Updated ResearchState with 'domain' and 'search_queries'.
     """
-    user_query = state["user_query"]
+    user_query = state["user_query"].strip()
     print(f"[QueryPlanner] Planning queries for: '{user_query}'")
 
-    llm = get_llm(task="light")
+    domain = "other"
+    queries: list[str] = []
 
-    messages = [
-        SystemMessage(content=SYSTEM_PROMPT),
-        HumanMessage(content=f"Research question: {user_query}"),
-    ]
+    try:
+        llm = get_llm(task="light")
+        messages = [
+            SystemMessage(content=SYSTEM_PROMPT),
+            HumanMessage(content=f"Research question: {user_query}"),
+        ]
 
-    response = llm.invoke(messages)
-    raw = extract_text(response.content)
+        response = llm.invoke(messages)
+        raw = extract_text(response.content)
 
-    # Extract JSON from response (handles cases where LLM adds markdown fences)
-    json_match = re.search(r'\{.*\}', raw, re.DOTALL)
-    if not json_match:
-        raise ValueError(f"[QueryPlanner] Could not parse JSON from LLM response:\n{raw}")
+        # Extract JSON from response (handling markdown fences)
+        json_match = re.search(r'\{.*\}', raw, re.DOTALL)
+        if json_match:
+            parsed = json.loads(json_match.group())
+            domain = str(parsed.get("domain", "other")).strip().lower()
+            raw_queries = parsed.get("queries", [])
+            if isinstance(raw_queries, list):
+                for q in raw_queries:
+                    clean_q = str(q).strip()
+                    if clean_q and clean_q not in queries:
+                        queries.append(clean_q)
+    except Exception as e:
+        print(f"[QueryPlanner] ⚠ LLM generation or parsing warning: {e}. Applying fallback.")
 
-    parsed = json.loads(json_match.group())
+    # ── Resilient Clamp & Pad to exactly 5 queries ───────────────────────────
+    if not queries:
+        queries = _fallback_queries(user_query)
 
-    domain = parsed.get("domain", "other")
-    queries = parsed.get("queries", [])
+    # If fewer than 5, pad with deterministic variants
+    fallback_pool = _fallback_queries(user_query)
+    for fb in fallback_pool:
+        if len(queries) >= 5:
+            break
+        if fb not in queries:
+            queries.append(fb)
 
-    if len(queries) != 5:
-        raise ValueError(f"[QueryPlanner] Expected 5 search queries, got {len(queries)}")
+    # Clamp to top 5
+    queries = queries[:5]
 
-    print(f"[QueryPlanner] Domain: {domain}")
+    print(f"[QueryPlanner] Domain classified: '{domain}'")
     for i, q in enumerate(queries, 1):
         print(f"[QueryPlanner]   Query {i}: {q}")
 

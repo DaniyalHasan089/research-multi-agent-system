@@ -35,12 +35,11 @@ Identify and elaborate on 4-6 recurring themes across the papers. For each theme
 - Note whether the theme is emerging, established, or contested
 
 ## 4. Current & Ongoing Work
-Describe what researchers are actively working on RIGHT NOW based on the papers reviewed. Be specific:
-- Name active research groups, labs, or institutions and their focus areas [n]
-- Describe specific benchmarks, datasets, or shared tasks currently being used
-- Identify techniques or architectures being actively refined or challenged
-- Highlight any preprints or very recent work (last 1-2 years) that signals where the field is heading [n]
-- Note any emerging consensus or active debates in the community
+Describe what researchers are actively working on RIGHT NOW based on the papers reviewed:
+- Highlight active research directions, methodologies, and benchmarks present in the papers [n]
+- Identify architectures and techniques currently being explored, refined, or compared
+- Reference recent papers and preprints that signal where the field is heading [n]
+- Strict Grounding Rule: ONLY reference institutions, labs, or benchmarks that are EXPLICITLY cited in the provided paper analyses. If specific lab or university affiliations are not present in the sources, do NOT invent or assume them; describe the ongoing research purely in terms of the verified technical methods and problem spaces.
 
 ## 5. Paper-by-Paper Breakdown
 For EVERY paper, write a dedicated subsection in this exact format:
@@ -78,6 +77,7 @@ List every paper as a numbered clickable markdown link:
 Rules:
 - Use inline citations [n] throughout sections 2–4 wherever you reference a specific paper
 - Every paper title in sections 5 and 8 MUST be a clickable markdown link: [Title](URL)
+- Strict Evidence Grounding: Never fabricate labs, authors, benchmarks, or statistics not supported by the provided paper context. If specific details are absent, summarize the verified technical contributions directly without extrapolating.
 - Write in analytical, precise academic prose — avoid vague generalities
 - Each section must be substantive; do not pad with filler
 - Do NOT include any preamble or text before the # heading

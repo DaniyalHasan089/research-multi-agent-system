@@ -2,16 +2,16 @@
 Agent 3: Analyzer & Ranker (LLM)
 
 Takes the clean paper list from the Paper Researcher and:
-  1. For each paper, prompts the LLM to extract structured insights
-     (problem, methodology, findings, limitations, relevance_score)
-  2. Sorts papers by relevance_score descending
-  3. Returns top-K papers
+  1. Concurrently analyzes candidate papers using asyncio.gather + Semaphore(5)
+  2. For each paper, extracts structured insights:
+     (summary, problem, methodology, findings, limitations, relevance_score)
+  3. Sorts papers by relevance_score descending
+  4. Returns top-K papers
 
 Output is written to ResearchState: paper_analyses
-
-Note: This is the most expensive step. v2 will parallelize these LLM calls.
 """
 
+import asyncio
 import json
 import os
 import re
@@ -39,20 +39,28 @@ Respond ONLY with a valid JSON object in this exact format:
 Be thorough, accurate, and objective. Use specific details from the paper content. Do not include text outside the JSON."""
 
 
-def _analyze_paper(llm, paper: dict, user_query: str, index: int, total: int) -> dict | None:
-    """Analyze a single paper and return structured insights, or None on failure."""
-    title = paper.get("title", "Untitled")
-    url = paper.get("url", "")
-    content = paper.get("content", "")
+async def _analyze_paper_async(
+    llm,
+    paper: dict,
+    user_query: str,
+    index: int,
+    total: int,
+    semaphore: asyncio.Semaphore,
+) -> dict | None:
+    """Concurrently analyze a single paper under semaphore control."""
+    async with semaphore:
+        title = paper.get("title", "Untitled")
+        url = paper.get("url", "")
+        content = paper.get("content", "")
 
-    # Increase content window for richer extractions
-    max_content_chars = 5000
-    if len(content) > max_content_chars:
-        content = content[:max_content_chars] + "... [truncated]"
+        # Truncate content to avoid exceeding context window
+        max_content_chars = 5000
+        if len(content) > max_content_chars:
+            content = content[:max_content_chars] + "... [truncated]"
 
-    print(f"[AnalyzerRanker] Analyzing paper {index}/{total}: '{title[:60]}...'")
+        print(f"[AnalyzerRanker] Analyzing paper {index}/{total}: '{title[:60]}...'")
 
-    user_message = f"""Research question: {user_query}
+        user_message = f"""Research question: {user_query}
 
 Paper title: {title}
 Paper URL: {url}
@@ -62,38 +70,37 @@ Abstract / Content:
 
 Please analyze this paper and return your assessment as JSON."""
 
-    try:
-        messages = [
-            SystemMessage(content=SYSTEM_PROMPT),
-            HumanMessage(content=user_message),
-        ]
-        response = llm.invoke(messages)
-        raw = extract_text(response.content)
+        try:
+            messages = [
+                SystemMessage(content=SYSTEM_PROMPT),
+                HumanMessage(content=user_message),
+            ]
+            response = await llm.ainvoke(messages)
+            raw = extract_text(response.content)
 
-        # Extract JSON (handles markdown fences)
-        json_match = re.search(r'\{.*\}', raw, re.DOTALL)
-        if not json_match:
-            print(f"[AnalyzerRanker]   ⚠ Could not parse JSON for '{title}'")
+            # Extract JSON (handles markdown fences)
+            json_match = re.search(r'\{.*\}', raw, re.DOTALL)
+            if not json_match:
+                print(f"[AnalyzerRanker]   ⚠ Could not parse JSON for '{title}'")
+                return None
+
+            analysis = json.loads(json_match.group())
+            analysis["title"] = title
+            analysis["url"] = url
+            analysis["relevance_score"] = float(analysis.get("relevance_score", 0))
+            if not analysis.get("summary"):
+                analysis["summary"] = analysis.get("findings", "No summary available.")
+            return analysis
+
+        except Exception as e:
+            print(f"[AnalyzerRanker]   ⚠ Failed to analyze '{title}': {e}")
             return None
 
-        analysis = json.loads(json_match.group())
-        analysis["title"] = title
-        analysis["url"] = url
-        # Ensure relevance_score is numeric
-        analysis["relevance_score"] = float(analysis.get("relevance_score", 0))
-        # Ensure summary exists (fallback to findings if missing)
-        if not analysis.get("summary"):
-            analysis["summary"] = analysis.get("findings", "No summary available.")
-        return analysis
 
-    except Exception as e:
-        print(f"[AnalyzerRanker]   ⚠ Failed to analyze '{title}': {e}")
-        return None
-
-
-def run(state: ResearchState) -> ResearchState:
+async def run(state: ResearchState) -> ResearchState:
     """
-    Analyzer & Ranker node — extracts insights from each paper and returns top-K.
+    Analyzer & Ranker node — asynchronously extracts insights from each paper
+    under concurrency control and returns top-K.
 
     Args:
         state: Current ResearchState containing 'clean_papers' and 'user_query'.
@@ -101,19 +108,22 @@ def run(state: ResearchState) -> ResearchState:
     Returns:
         Updated ResearchState with 'paper_analyses'.
     """
-    clean_papers = state["clean_papers"]
-    user_query = state["user_query"]
+    clean_papers = state.get("clean_papers", [])
+    user_query = state.get("user_query", "")
     total = len(clean_papers)
 
-    print(f"[AnalyzerRanker] Analyzing {total} papers (top-K = {TOP_K})")
+    print(f"[AnalyzerRanker] Concurrently analyzing {total} papers (top-K = {TOP_K}, concurrency = 5)")
 
     llm = get_llm(task="heavy")
-    analyses: list[dict] = []
+    semaphore = asyncio.Semaphore(5)
 
-    for i, paper in enumerate(clean_papers, 1):
-        result = _analyze_paper(llm, paper, user_query, i, total)
-        if result is not None:
-            analyses.append(result)
+    tasks = [
+        _analyze_paper_async(llm, paper, user_query, i, total, semaphore)
+        for i, paper in enumerate(clean_papers, 1)
+    ]
+
+    results = await asyncio.gather(*tasks)
+    analyses = [r for r in results if r is not None]
 
     # Sort by relevance score descending and take top-K
     analyses.sort(key=lambda x: x.get("relevance_score", 0), reverse=True)
