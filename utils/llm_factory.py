@@ -38,7 +38,7 @@ def _get_gemini(task: str):
         raise EnvironmentError("GOOGLE_API_KEY is not set in the environment.")
 
     # Allow task-based model tiering via env vars
-    default_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    default_model = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
     if task == "heavy":
         model_name = os.getenv("GEMINI_HEAVY_MODEL", default_model)
     else:
