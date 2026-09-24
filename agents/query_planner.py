@@ -59,13 +59,18 @@ def run(state: ResearchState) -> ResearchState:
     Query Planner node — expands user_query into domain + 5 search strings.
 
     Args:
-        state: Current ResearchState containing 'user_query'.
+        state: Current ResearchState containing 'user_query', optionally 'year_from'/'year_to'.
 
     Returns:
         Updated ResearchState with 'domain' and 'search_queries'.
     """
     user_query = state["user_query"].strip()
+    year_from = state.get("year_from")
+    year_to = state.get("year_to")
     print(f"[QueryPlanner] Planning queries for: '{user_query}'")
+    if year_from or year_to:
+        date_note = f" (date filter: {year_from or 'any'}–{year_to or 'any'})"
+        print(f"[QueryPlanner] Date filter applied{date_note}")
 
     domain = "other"
     queries: list[str] = []
@@ -108,6 +113,14 @@ def run(state: ResearchState) -> ResearchState:
 
     # Clamp to top 5
     queries = queries[:5]
+
+    # ── Embed date range into each query string when provided ───────────────────────
+    if year_from or year_to:
+        date_suffix = " ".join(
+            [str(year_from) if year_from else "", str(year_to) if year_to else ""]
+        ).strip()
+        queries = [f"{q} {date_suffix}" for q in queries]
+        print(f"[QueryPlanner] Appended date range '{date_suffix}' to all queries")
 
     print(f"[QueryPlanner] Domain classified: '{domain}'")
     for i, q in enumerate(queries, 1):

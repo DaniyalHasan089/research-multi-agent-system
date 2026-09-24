@@ -239,6 +239,7 @@
     .gradient-text {
       background: linear-gradient(135deg, #ffffff 30%, #a5b4fc 70%, #38bdf8 100%);
       -webkit-background-clip: text;
+      background-clip: text;
       -webkit-text-fill-color: transparent;
     }
 
@@ -823,6 +824,71 @@
       transform: translateY(-1px);
     }
 
+    /* Year Filter Row */
+    .year-filter-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-top: 0.85rem;
+      flex-wrap: wrap;
+    }
+
+    .year-filter-label {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--text-faint);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      white-space: nowrap;
+    }
+
+    .year-input {
+      width: 90px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      color: var(--text-main);
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      padding: 0.4rem 0.65rem;
+      text-align: center;
+      transition: border-color 0.2s ease;
+      -moz-appearance: textfield;
+      appearance: textfield;
+    }
+
+    .year-input::-webkit-outer-spin-button,
+    .year-input::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+    .year-input:focus {
+      outline: none;
+      border-color: var(--border-accent);
+      background: rgba(99, 102, 241, 0.06);
+    }
+
+    .year-input::placeholder { color: var(--text-faint); }
+
+    .year-separator {
+      color: var(--text-faint);
+      font-size: 0.78rem;
+    }
+
+    .year-clear-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-faint);
+      font-size: 0.72rem;
+      padding: 0.3rem 0.5rem;
+      border-radius: 4px;
+      transition: color 0.15s ease;
+    }
+
+    .year-clear-btn:hover { color: var(--rose); }
+
     /* Interactive Table of Contents */
     .toc-bar {
       background: rgba(10, 12, 18, 0.95);
@@ -1202,6 +1268,39 @@
         <button class="query-chip" onclick="setQuery('Diffusion models for de novo protein design')">⚡ Diffusion in Protein Design</button>
         <button class="query-chip" onclick="setQuery('Mechanistic interpretability of large language models')">⚡ LLM Interpretability</button>
       </div>
+
+      <!-- Year / Date Range Filter -->
+      <div class="year-filter-row">
+        <span class="year-filter-label">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="16" y1="2" x2="16" y2="6"></line>
+            <line x1="8" y1="2" x2="8" y2="6"></line>
+            <line x1="3" y1="10" x2="21" y2="10"></line>
+          </svg>
+          Date Range (optional):
+        </span>
+        <input
+          id="year-from"
+          class="year-input"
+          type="number"
+          placeholder="From"
+          min="1990"
+          max="2026"
+          title="Include papers from this year"
+        />
+        <span class="year-separator">&mdash;</span>
+        <input
+          id="year-to"
+          class="year-input"
+          type="number"
+          placeholder="To"
+          min="1990"
+          max="2026"
+          title="Include papers up to this year"
+        />
+        <button class="year-clear-btn" onclick="clearYearFilter()" title="Clear date filter">&times; Clear</button>
+      </div>
     </section>
 
     <!-- Pipeline Deck -->
@@ -1377,12 +1476,16 @@
         <span class="toc-label">Sections:</span>
         <a class="toc-link" href="#1-executive-summary">Executive Summary</a>
         <a class="toc-link" href="#2-research-landscape">Landscape</a>
-        <a class="toc-link" href="#3-key-themes-trends">Themes</a>
-        <a class="toc-link" href="#4-current-ongoing-work">Current Work</a>
-        <a class="toc-link" href="#5-paper-by-paper-breakdown">Paper Breakdown</a>
-        <a class="toc-link" href="#6-methodological-comparison">Methodologies</a>
-        <a class="toc-link" href="#7-gaps-open-problems">Open Problems</a>
-        <a class="toc-link" href="#8-references">References</a>
+        <a class="toc-link" href="#1-executive-summary">Summary</a>
+        <a class="toc-link" href="#2-search-strategy">Search Strategy</a>
+        <a class="toc-link" href="#3-inclusion-criteria">Inclusion Criteria</a>
+        <a class="toc-link" href="#4-background-context">Background</a>
+        <a class="toc-link" href="#5-thematic-synthesis">Themes</a>
+        <a class="toc-link" href="#6-current-ongoing-work">Current Work</a>
+        <a class="toc-link" href="#7-paper-by-paper-breakdown">Paper Breakdown</a>
+        <a class="toc-link" href="#8-methodological-comparison">Methodologies</a>
+        <a class="toc-link" href="#9-gaps-future-directions">Future Directions</a>
+        <a class="toc-link" href="#10-references">References</a>
       </div>
 
       <!-- Rendered Report Content -->
@@ -1586,7 +1689,11 @@
       fetch(`${API_BASE}/research`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify({
+          query,
+          year_from: getYearInput('year-from'),
+          year_to: getYearInput('year-to'),
+        }),
       }).then(response => {
         if (!response.ok) {
           return response.json().then(e => { throw new Error(e.detail || 'Server returned an error.'); });
@@ -1742,11 +1849,23 @@
       showToast('Downloading PDF research dossier...');
     }
 
+    // ── Year Filter Helpers ──────────────────────────────────────
+    function getYearInput(id) {
+      const val = parseInt(document.getElementById(id).value, 10);
+      return isNaN(val) ? null : val;
+    }
+
+    function clearYearFilter() {
+      document.getElementById('year-from').value = '';
+      document.getElementById('year-to').value = '';
+    }
+
     // ── Reset for New Search ─────────────────────────────────────
     function newSearch() {
       document.getElementById('report-section').style.display = 'none';
       document.getElementById('progress-section').style.display = 'none';
       clearQuery();
+      clearYearFilter();
       resetPipeline();
       hideError();
       window.scrollTo({ top: 0, behavior: 'smooth' });

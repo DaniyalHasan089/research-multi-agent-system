@@ -4,12 +4,14 @@ node in the LangGraph pipeline. Each agent reads what it needs and
 writes only its own outputs. No shared memory between agents.
 """
 
-from typing import TypedDict
+from typing import Optional, TypedDict
 
 
 class ResearchState(TypedDict, total=False):
     # ── Input ────────────────────────────────────────────────────────────────
     user_query: str           # Raw natural-language question from the user
+    year_from: Optional[int]  # Optional: include papers published from this year
+    year_to: Optional[int]    # Optional: include papers published up to this year
 
     # ── Agent 1: Query Planner ───────────────────────────────────────────────
     domain: str               # Classified domain: cs, medicine, physics, etc.
@@ -20,6 +22,7 @@ class ResearchState(TypedDict, total=False):
 
     # ── Agent 3: Analyzer & Ranker ───────────────────────────────────────────
     paper_analyses: list[dict] # Top-K papers with extracted insights, sorted by score
+    search_stats: dict         # Pipeline counts for PRISMA-style reporting
 
     # ── Agent 4: Report Writer ───────────────────────────────────────────────
     report_markdown: str      # Full structured Markdown report with [n] citations

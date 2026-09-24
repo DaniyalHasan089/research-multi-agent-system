@@ -40,6 +40,8 @@ _INDEX_HTML = _STATIC_DIR / "index.html"
 # ── Request / Response Models ─────────────────────────────────────────────────
 class ResearchRequest(BaseModel):
     query: str
+    year_from: Optional[int] = None   # e.g. 2020 — include papers from this year
+    year_to: Optional[int] = None     # e.g. 2024 — include papers up to this year
 
 
 # ── SSE Helper ────────────────────────────────────────────────────────────────
@@ -79,7 +81,11 @@ async def run_research(request: ResearchRequest):
         from graph.state import ResearchState
         from agents.formatter import get_pdf_dir
 
-        state: ResearchState = {"user_query": query}
+        state: ResearchState = {
+            "user_query": query,
+            "year_from": request.year_from,
+            "year_to": request.year_to,
+        }
         accumulated_state: dict = dict(state)
 
         try:
