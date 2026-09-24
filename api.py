@@ -103,9 +103,12 @@ async def run_research(request: ResearchRequest):
                     if node_name == "query_planner":
                         domain = accumulated_state.get("domain", "other")
                         queries = accumulated_state.get("search_queries", [])
+                        clarified_focus = accumulated_state.get("clarified_focus", "")
+                        focus_str = f" • Focus: {clarified_focus[:65]}..." if clarified_focus else ""
                         yield _sse_event(
                             "query_planned", 15,
-                            f"Domain: {domain.upper()} — Generated {len(queries)} search angles"
+                            f"Domain: {domain.upper()}{focus_str} — Generated {len(queries)} search angles",
+                            data={"domain": domain, "clarified_focus": clarified_focus, "queries": queries}
                         )
                         await asyncio.sleep(0)
                         yield _sse_event("searching", 20, f"Searching {domain} academic repositories via Tavily...")
@@ -153,8 +156,10 @@ async def run_research(request: ResearchRequest):
                             data={
                                 "report_html": accumulated_state.get("report_html", ""),
                                 "report_markdown": accumulated_state.get("report_markdown", ""),
+                                "paper_analyses": accumulated_state.get("paper_analyses", []),
                                 "pdf_id": pdf_id,
                                 "domain": accumulated_state.get("domain", ""),
+                                "clarified_focus": accumulated_state.get("clarified_focus", ""),
                                 "paper_count": analyzed_count,
                                 "query": query,
                             }

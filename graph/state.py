@@ -15,6 +15,7 @@ class ResearchState(TypedDict, total=False):
 
     # ── Agent 1: Query Planner ───────────────────────────────────────────────
     domain: str               # Classified domain: cs, medicine, physics, etc.
+    clarified_focus: Optional[str] # Explicit disambiguated research scope & boundary
     search_queries: list[str] # 5 targeted academic search strings
 
     # ── Agent 2: Paper Researcher ────────────────────────────────────────────

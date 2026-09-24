@@ -37,101 +37,76 @@ except ImportError:
 
 
 def _get_pdf_css() -> str:
-    """Inline CSS optimised for xhtml2pdf PDF rendering."""
+    """Inline CSS optimised for xhtml2pdf PDF rendering with zero column overlap."""
     return """
         @page {
-            size: A4;
-            margin: 2cm 1.8cm 2.5cm 1.8cm;
+            size: A4 landscape;
+            margin: 1.0cm 0.8cm 1.0cm 0.8cm;
         }
         body {
             font-family: Helvetica, Arial, sans-serif;
-            font-size: 11pt;
-            line-height: 1.6;
+            font-size: 8pt;
+            line-height: 1.35;
             color: #1f2937;
         }
         h1 {
-            font-size: 20pt;
+            font-size: 15pt;
             font-weight: bold;
             color: #1e1b4b;
             border-bottom: 2pt solid #4f46e5;
-            padding-bottom: 6pt;
-            margin-bottom: 12pt;
+            padding-bottom: 4pt;
+            margin-bottom: 8pt;
         }
         h2 {
-            font-size: 14pt;
+            font-size: 12pt;
             font-weight: bold;
             color: #312e81;
             border-bottom: 1pt solid #e5e7eb;
-            padding-bottom: 4pt;
-            margin-top: 18pt;
-            margin-bottom: 8pt;
-        }
-        h3 {
-            font-size: 12pt;
-            font-weight: bold;
-            color: #4338ca;
+            padding-bottom: 3pt;
             margin-top: 12pt;
             margin-bottom: 6pt;
         }
         p {
-            margin-bottom: 8pt;
+            margin-bottom: 6pt;
             text-align: justify;
-        }
-        ul, ol {
-            margin-left: 18pt;
-            margin-bottom: 8pt;
-        }
-        li {
-            margin-bottom: 3pt;
-        }
-        a {
-            color: #4f46e5;
-        }
-        code {
-            font-family: Courier, monospace;
-            font-size: 9pt;
-            background: #f3f4f6;
-            padding: 1pt 3pt;
-        }
-        pre {
-            background: #f8f9fa;
-            border-left: 3pt solid #4f46e5;
-            padding: 8pt 10pt;
-            font-size: 9pt;
-            font-family: Courier, monospace;
-            margin-bottom: 10pt;
-        }
-        blockquote {
-            border-left: 3pt solid #6366f1;
-            padding: 4pt 10pt;
-            background: #eef2ff;
-            margin: 8pt 0;
-            font-style: italic;
         }
         table {
             width: 100%;
             border-collapse: collapse;
-            margin: 10pt 0;
-            font-size: 10pt;
+            table-layout: fixed;
+            margin: 6pt 0;
+            font-size: 7.5pt;
         }
         th {
             background: #4f46e5;
             color: white;
-            padding: 5pt 8pt;
+            padding: 5pt 4pt;
             text-align: left;
             font-weight: bold;
+            font-size: 7.5pt;
+            vertical-align: top;
+            word-wrap: break-word;
         }
         td {
-            padding: 4pt 8pt;
-            border-bottom: 1pt solid #e5e7eb;
+            padding: 4.5pt 4pt;
+            border-bottom: 0.5pt solid #e5e7eb;
+            font-size: 7.2pt;
+            line-height: 1.35;
+            vertical-align: top;
+            word-wrap: break-word;
         }
         tr:nth-child(even) td {
             background: #f9fafb;
         }
+        a {
+            color: #4f46e5;
+            text-decoration: underline;
+            word-wrap: break-word;
+        }
         hr {
             border: none;
             border-top: 1pt solid #e5e7eb;
-            margin: 12pt 0;
+            margin: 8pt 0;
         }
     """
 
@@ -141,11 +116,12 @@ def _get_web_css() -> str:
     css_path = Path(__file__).parent.parent / "utils" / "pdf_styles.css"
     if css_path.exists():
         return css_path.read_text(encoding="utf-8")
-    # Minimal fallback
     return """
-        body { font-family: sans-serif; max-width: 860px; margin: 2rem auto; padding: 0 1rem; }
+        body { font-family: sans-serif; max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
         h1 { color: #1e1b4b; } h2 { color: #312e81; }
-        a { color: #4f46e5; } code { background: #f3f4f6; padding: 2px 6px; border-radius: 3px; }
+        table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        th, td { padding: 8px; border: 1px solid #e5e7eb; word-break: break-word; }
+        th { background: #4f46e5; color: white; }
     """
 
 
@@ -157,8 +133,29 @@ def _markdown_to_html(report_markdown: str, for_pdf: bool = False) -> str:
         report_markdown: The Markdown report text.
         for_pdf: If True, uses PDF-optimised inline CSS; otherwise uses web CSS.
     """
+    import re
     extensions = ["tables", "fenced_code", "toc", "nl2br", "extra"]
     body_html = md_lib.markdown(report_markdown, extensions=extensions)
+
+    if for_pdf:
+        # Inject colgroup with strict widths for 7-column research table
+        colgroup = """<colgroup>
+            <col style="width: 22%;" width="22%" />
+            <col style="width: 12%;" width="12%" />
+            <col style="width: 6%;" width="6%" />
+            <col style="width: 12%;" width="12%" />
+            <col style="width: 16%;" width="16%" />
+            <col style="width: 16%;" width="16%" />
+            <col style="width: 16%;" width="16%" />
+        </colgroup>"""
+        body_html = re.sub(
+            r"<table>",
+            r'<table style="width: 100%; table-layout: fixed;">' + colgroup,
+            body_html,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+
     css = _get_pdf_css() if for_pdf else _get_web_css()
 
     return f"""<!DOCTYPE html>

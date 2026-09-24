@@ -18,19 +18,30 @@ from graph.state import ResearchState
 from utils.llm_factory import get_llm, extract_text
 
 
-SYSTEM_PROMPT = """You are an expert academic research assistant specializing in query formulation.
-Your task is to analyze a user's research question and:
-1. Classify the primary research domain.
-2. Generate 5 distinct, targeted academic search strings optimized for databases like arXiv, PubMed, and Semantic Scholar.
+SYSTEM_PROMPT = """You are an expert academic research strategist specializing in scientific query formulation, conceptual disambiguation, and precision search retrieval.
 
-Each search string should:
-- Target a different angle or sub-topic of the main question
-- Use academic terminology and keywords
-- Be concise (5-10 words) but specific enough to return relevant papers
+Your task is to analyze a user's research question and:
+1. Disambiguate polysemous, metaphorical, or dual-meaning terms:
+   - In computer science, artificial intelligence, and software engineering, words like "harness", "agent", "transformer", "diffusion", "pipeline", "container", "prompt", and "alignment" have precise computational meanings.
+   - For example, "harness engineering" in modern computer science refers to test harnesses, evaluation frameworks, AI agent runtime substrates, and benchmark harnesses. It MUST NEVER be confused with physical wearable gear (e.g. fall-arrest straps, climbing harnesses, dog harnesses, or automotive wiring).
+   - Unless the user explicitly asks for physical, mechanical, or wearable equipment, computational and AI topics must be strictly classified under "cs" and anchored with software/AI terminology.
+2. Define a "clarified_focus" (1 concise, unambiguous sentence) explicitly stating the conceptual boundary of the research (e.g., "AI and software agent harness engineering, including evaluation substrates, runtime execution environments, and benchmark frameworks").
+3. Classify the primary research domain:
+   - cs (Computer Science, Artificial Intelligence, Software Engineering, Machine Learning)
+   - medicine (Clinical Medicine, Pharmacology, Healthcare)
+   - biology (Biological Sciences, Genetics, Bioinformatics)
+   - physics (Physics, Quantum, Astronomy, Materials Science)
+   - economics (Economics, Quantitative Finance, Business)
+   - engineering (Mechanical, Civil, Structural, Aerospace Engineering ONLY when physical equipment/structures are explicitly requested)
+   - other (Other academic fields)
+4. Generate exactly 5 targeted, high-precision academic search strings optimized for scientific databases (arXiv, Semantic Scholar, IEEE, PubMed).
+   - CRITICAL REQUIREMENT: Every single search string MUST be anchored with unambiguous domain keywords to prevent cross-domain contamination (e.g., for AI/software harness: include terms like 'AI agent', 'LLM runtime', 'software benchmark', 'test harness architecture', 'evaluation substrate').
+   - NEVER generate queries for physical wearable equipment, ergonomics, fall protection, or strap dynamics when the inquiry is about software or AI systems.
 
 Respond ONLY with a valid JSON object in this exact format:
 {
-  "domain": "<single domain: cs | medicine | physics | biology | economics | psychology | engineering | other>",
+  "domain": "<cs | medicine | physics | biology | economics | engineering | other>",
+  "clarified_focus": "<1 concise sentence defining the explicit conceptual boundary and intended domain>",
   "queries": [
     "<search string 1>",
     "<search string 2>",
@@ -42,9 +53,18 @@ Respond ONLY with a valid JSON object in this exact format:
 Do not include any text outside the JSON object."""
 
 
-def _fallback_queries(user_query: str) -> list[str]:
-    """Generate 5 deterministic academic queries if the LLM output fails to parse."""
+def _fallback_queries(user_query: str, domain: str = "cs") -> list[str]:
+    """Generate 5 deterministic academic queries anchored in the intended domain."""
     base = user_query.strip()
+    # Check if query is software/AI harness engineering
+    if re.search(r"\bharness\b", base, re.I) and not re.search(r"\b(fall|climbing|safety belt|strap|body|dog)\b", base, re.I):
+        return [
+            f"{base} AI agent runtime substrate",
+            f"{base} LLM benchmark evaluation framework",
+            f"{base} software architecture test automation",
+            f"{base} observability autonomous systems",
+            f"{base} foundation models empirical evaluation",
+        ]
     return [
         f"{base} survey review",
         f"{base} methodology architecture",
@@ -56,13 +76,13 @@ def _fallback_queries(user_query: str) -> list[str]:
 
 def run(state: ResearchState) -> ResearchState:
     """
-    Query Planner node — expands user_query into domain + 5 search strings.
+    Query Planner node — expands user_query into domain, clarified_focus, and 5 search strings.
 
     Args:
         state: Current ResearchState containing 'user_query', optionally 'year_from'/'year_to'.
 
     Returns:
-        Updated ResearchState with 'domain' and 'search_queries'.
+        Updated ResearchState with 'domain', 'clarified_focus', and 'search_queries'.
     """
     user_query = state["user_query"].strip()
     year_from = state.get("year_from")
@@ -72,7 +92,8 @@ def run(state: ResearchState) -> ResearchState:
         date_note = f" (date filter: {year_from or 'any'}–{year_to or 'any'})"
         print(f"[QueryPlanner] Date filter applied{date_note}")
 
-    domain = "other"
+    domain = "cs" if re.search(r"\b(harness|agent|llm|model|software|ai|prompt)\b", user_query, re.I) else "other"
+    clarified_focus = ""
     queries: list[str] = []
 
     try:
@@ -89,7 +110,10 @@ def run(state: ResearchState) -> ResearchState:
         json_match = re.search(r'\{.*\}', raw, re.DOTALL)
         if json_match:
             parsed = json.loads(json_match.group())
-            domain = str(parsed.get("domain", "other")).strip().lower()
+            parsed_domain = str(parsed.get("domain", "")).strip().lower()
+            if parsed_domain:
+                domain = parsed_domain
+            clarified_focus = str(parsed.get("clarified_focus", "")).strip()
             raw_queries = parsed.get("queries", [])
             if isinstance(raw_queries, list):
                 for q in raw_queries:
@@ -99,12 +123,19 @@ def run(state: ResearchState) -> ResearchState:
     except Exception as e:
         print(f"[QueryPlanner] ⚠ LLM generation or parsing warning: {e}. Applying fallback.")
 
+    # ── Establish default clarified_focus if absent ─────────────────────────
+    if not clarified_focus:
+        if re.search(r"\bharness\b", user_query, re.I) and not re.search(r"\b(fall|climbing|safety belt|strap|body|dog)\b", user_query, re.I):
+            domain = "cs"
+            clarified_focus = "AI Agent & Software Test Harness Engineering (Runtime Substrates, Benchmark Evaluators, Execution Environments)"
+        else:
+            clarified_focus = f"Academic literature review on {user_query} in {domain.upper()}"
+
     # ── Resilient Clamp & Pad to exactly 5 queries ───────────────────────────
     if not queries:
-        queries = _fallback_queries(user_query)
+        queries = _fallback_queries(user_query, domain)
 
-    # If fewer than 5, pad with deterministic variants
-    fallback_pool = _fallback_queries(user_query)
+    fallback_pool = _fallback_queries(user_query, domain)
     for fb in fallback_pool:
         if len(queries) >= 5:
             break
@@ -123,7 +154,8 @@ def run(state: ResearchState) -> ResearchState:
         print(f"[QueryPlanner] Appended date range '{date_suffix}' to all queries")
 
     print(f"[QueryPlanner] Domain classified: '{domain}'")
+    print(f"[QueryPlanner] Clarified Focus: '{clarified_focus}'")
     for i, q in enumerate(queries, 1):
         print(f"[QueryPlanner]   Query {i}: {q}")
 
-    return {**state, "domain": domain, "search_queries": queries}
+    return {**state, "domain": domain, "clarified_focus": clarified_focus, "search_queries": queries}

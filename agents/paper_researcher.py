@@ -106,25 +106,53 @@ def normalize_title(title: str) -> str:
     return t or "Untitled"
 
 
-def extract_identity(url: str, title: str) -> dict:
-    """Extract arxiv_id / doi / canonical_url from a paper URL (and title if needed)."""
+from utils.arxiv_utils import extract_arxiv_id, batch_fetch_arxiv_metadata, format_authors
+
+_DOMAIN_VENUE_MAP = {
+    "arxiv.org": "arXiv Preprint",
+    "nature.com": "Nature",
+    "science.org": "Science",
+    "ieee.org": "IEEE Xplore",
+    "dl.acm.org": "ACM Digital Library",
+    "acm.org": "ACM",
+    "biorxiv.org": "bioRxiv",
+    "medrxiv.org": "medRxiv",
+    "sciencedirect.com": "ScienceDirect",
+    "pubmed.ncbi.nlm.nih.gov": "PubMed",
+    "ncbi.nlm.nih.gov": "NCBI",
+    "semanticscholar.org": "Semantic Scholar",
+    "paperswithcode.com": "Papers With Code",
+    "ssrn.com": "SSRN",
+    "nber.org": "NBER",
+    "springer.com": "Springer",
+    "wiley.com": "Wiley",
+    "cell.com": "Cell Press",
+    "thelancet.com": "The Lancet",
+    "frontiersin.org": "Frontiers",
+    "mdpi.com": "MDPI",
+    "plos.org": "PLOS",
+    "pnas.org": "PNAS",
+}
+
+
+def extract_identity(url: str, title: str, content: str = "") -> dict:
+    """Extract arxiv_id / doi / canonical_url / year / venue / author from URL, title, and content."""
     url = (url or "").strip()
-    arxiv_id = None
+    arxiv_id = extract_arxiv_id(url) or extract_arxiv_id(title) or extract_arxiv_id(content[:400])
     doi = None
     year = None
     venue = None
+    author = None
 
-    # arXiv: /abs/ID or /pdf/ID.pdf
-    arxiv_match = re.search(
-        r"arxiv\.org/(?:abs|pdf)/([0-9]{4}\.[0-9]{4,5}(?:v\d+)?)",
-        url,
-        flags=re.IGNORECASE,
-    )
-    if arxiv_match:
-        arxiv_id = arxiv_match.group(1)
-        # Prefer versionless abs URL as canonical
+    if arxiv_id:
         base_id = re.sub(r"v\d+$", "", arxiv_id)
         canonical_url = f"https://arxiv.org/abs/{base_id}"
+        # Extract publication year from modern arXiv ID (YYMM)
+        ym_match = re.match(r"^([0-9]{2})[0-9]{2}", base_id)
+        if ym_match:
+            yy = int(ym_match.group(1))
+            year = 2000 + yy if yy < 50 else 1900 + yy
+        venue = f"arXiv:{base_id}"
     else:
         canonical_url = url
 
@@ -136,91 +164,58 @@ def extract_identity(url: str, title: str) -> dict:
     )
     if doi_match:
         doi = doi_match.group(1).rstrip("/")
-        # Prefer doi.org canonical if we have no arxiv canonical
         if not arxiv_id:
             canonical_url = f"https://doi.org/{doi}"
 
-    # Year/venue left as None unless trivially parseable — do not invent
+    # Extract year fallback from URL or title
+    if year is None:
+        y_url = re.search(r"/(?:20|19)(\d{2})[/-]|(?:20|19)(\d{2})", url)
+        if y_url:
+            matched_year = int(f"20{y_url.group(1) or y_url.group(2)}")
+            if 1990 <= matched_year <= 2030:
+                year = matched_year
+    if year is None and title:
+        y_title = re.search(r"\b(20[12]\d)\b", title)
+        if y_title:
+            year = int(y_title.group(1))
+
+    # Extract venue fallback from domain
+    if not venue:
+        for domain, domain_venue in _DOMAIN_VENUE_MAP.items():
+            if domain in url.lower():
+                venue = domain_venue
+                break
+
+    # Extract author hint from content if explicitly formatted
+    if content:
+        auth_match = re.search(
+            r"(?:authors?|by)\s*:\s*([A-Z][a-zA-Z\s,.-]+?)(?:\.|\n|;|\band\b|Abstract)",
+            content[:600],
+            flags=re.IGNORECASE,
+        )
+        if auth_match:
+            cand = auth_match.group(1).strip()
+            if 3 < len(cand) < 60 and not any(bad in cand.lower() for bad in ["abstract", "introduction", "download", "pdf", "table", "figure"]):
+                author = cand
+
     return {
         "arxiv_id": arxiv_id,
         "doi": doi,
         "canonical_url": canonical_url or url,
         "year": year,
         "venue": venue,
+        "author": author,
     }
 
 
-def _collapse_ws(text: str) -> str:
-    return re.sub(r"\s+", " ", (text or "").strip())
-
-
-def _parse_arxiv_atom_titles(xml_text: str) -> dict[str, str]:
-    """Parse arXiv Atom API XML into {arxiv_id: title} for each entry."""
-    mapping: dict[str, str] = {}
-    if not xml_text:
-        return mapping
-
-    try:
-        root = ET.fromstring(xml_text)
-    except ET.ParseError:
-        return mapping
-
-    for entry in root.findall("atom:entry", _ARXIV_ATOM_NS):
-        title_el = entry.find("atom:title", _ARXIV_ATOM_NS)
-        id_el = entry.find("atom:id", _ARXIV_ATOM_NS)
-        if title_el is None or id_el is None or not (id_el.text or "").strip():
-            continue
-
-        # id looks like http://arxiv.org/abs/1234.5678v1
-        id_text = id_el.text.strip()
-        m = re.search(r"arxiv\.org/abs/([0-9]{4}\.[0-9]{4,5}(?:v\d+)?)", id_text, re.I)
-        if not m:
-            continue
-        aid = m.group(1)
-        title = _collapse_ws("".join(title_el.itertext()))
-        if title:
-            mapping[aid] = title
-            # Also index versionless form for easier lookup
-            base = re.sub(r"v\d+$", "", aid)
-            mapping[base] = title
-
-    return mapping
-
-
-def _fetch_arxiv_titles_batch(arxiv_ids: list[str]) -> dict[str, str]:
-    """Fetch canonical titles for a batch of arXiv IDs. On failure return {}."""
-    if not arxiv_ids:
-        return {}
-
-    id_list = ",".join(arxiv_ids)
-    url = f"https://export.arxiv.org/api/query?id_list={id_list}"
-
-    try:
-        if httpx is not None:
-            with httpx.Client(timeout=_ARXIV_TIMEOUT_S) as client:
-                resp = client.get(url)
-                resp.raise_for_status()
-                return _parse_arxiv_atom_titles(resp.text)
-        else:
-            import urllib.request
-
-            req = urllib.request.Request(url, headers={"User-Agent": "research-multi-agent-system/1.0"})
-            with urllib.request.urlopen(req, timeout=_ARXIV_TIMEOUT_S) as resp:
-                return _parse_arxiv_atom_titles(resp.read().decode("utf-8", errors="replace"))
-    except Exception as e:
-        print(f"[PaperResearcher] arXiv title batch failed ({len(arxiv_ids)} ids): {e}")
-        return {}
-
-
-def resolve_arxiv_titles(papers: list[dict]) -> list[dict]:
+def resolve_arxiv_metadata(papers: list[dict]) -> list[dict]:
     """
-    Replace truncated/normalized titles with canonical arXiv titles when arxiv_id
-    is present. Batches id_list requests; on failure keeps the existing title.
+    Upgrade title, author(s), year, and venue from arXiv API / HTML when arxiv_id is present.
+    Ensures at least 2 authors are named when multiple authors exist.
     """
     if not papers:
         return papers
 
-    # Preserve order of first occurrence; prefer id as stored
     ids: list[str] = []
     seen: set[str] = set()
     for p in papers:
@@ -232,15 +227,7 @@ def resolve_arxiv_titles(papers: list[dict]) -> list[dict]:
     if not ids:
         return papers
 
-    title_map: dict[str, str] = {}
-    batches = [
-        ids[i : i + _ARXIV_BATCH_SIZE]
-        for i in range(0, len(ids), _ARXIV_BATCH_SIZE)
-    ]
-    for bi, batch in enumerate(batches):
-        if bi > 0:
-            time.sleep(_ARXIV_BATCH_SLEEP_S)
-        title_map.update(_fetch_arxiv_titles_batch(batch))
+    meta_map = batch_fetch_arxiv_metadata(ids)
 
     upgraded = 0
     for p in papers:
@@ -248,20 +235,26 @@ def resolve_arxiv_titles(papers: list[dict]) -> list[dict]:
         if not aid:
             continue
         base = re.sub(r"v\d+$", "", aid)
-        new_title = title_map.get(aid) or title_map.get(base)
-        if not new_title:
+        meta = meta_map.get(aid) or meta_map.get(base)
+        if not meta:
             continue
-        old = (p.get("title") or "").strip()
-        if new_title != old:
-            p["title"] = new_title
-            upgraded += 1
+
+        if meta.get("title"):
+            p["title"] = meta["title"]
+        if meta.get("author"):
+            p["author"] = meta["author"]
+        if meta.get("year") and not p.get("year"):
+            p["year"] = meta["year"]
+        if meta.get("venue") and (not p.get("venue") or p["venue"].lower() in ["unknown", "n/a", "none"]):
+            p["venue"] = meta["venue"]
+        upgraded += 1
 
     print(
-        f"[PaperResearcher] arXiv title resolve: "
-        f"{upgraded}/{len(ids)} titles upgraded "
-        f"({len(batches)} batch request(s))"
+        f"[PaperResearcher] arXiv metadata resolve: "
+        f"{upgraded}/{len(ids)} papers enriched with canonical author & metadata"
     )
     return papers
+
 
 
 def _get_allowlist_for_domain(domain: str) -> list[str]:
@@ -323,7 +316,7 @@ def run(state: ResearchState) -> ResearchState:
                 if len(content) > 80 and url:
                     raw_title = r.get("title", "Untitled").strip()
                     clean_title = normalize_title(raw_title)
-                    identity = extract_identity(url, clean_title)
+                    identity = extract_identity(url, clean_title, content)
                     canonical = identity.get("canonical_url") or url
                     filtered.append({
                         "title": clean_title,
@@ -334,6 +327,7 @@ def run(state: ResearchState) -> ResearchState:
                         "doi": identity.get("doi") or "",
                         "year": identity.get("year"),
                         "venue": identity.get("venue") or "",
+                        "author": identity.get("author") or "",
                     })
 
             # Prefer higher-scoring hits within each query before round-robin
@@ -364,7 +358,7 @@ def run(state: ResearchState) -> ResearchState:
 
     print(f"[PaperResearcher] Round-robin selection complete: {len(clean_papers)} papers")
 
-    # After final clean_papers: resolve canonical titles from arXiv when possible
-    clean_papers = resolve_arxiv_titles(clean_papers)
+    # After final clean_papers: enrich with canonical arXiv metadata when possible
+    clean_papers = resolve_arxiv_metadata(clean_papers)
 
     return {**state, "clean_papers": clean_papers}

@@ -7,20 +7,20 @@
 
 /* ── Page Setup ────────────────────────────────────────────── */
 @page {
-    size: A4;
-    margin: 2.5cm 2cm 2.5cm 2cm;
+    size: A4 landscape;
+    margin: 1.2cm 1.0cm 1.2cm 1.0cm;
 
     @bottom-right {
         content: "Page " counter(page) " of " counter(pages);
         font-family: 'Inter', sans-serif;
-        font-size: 9pt;
+        font-size: 8pt;
         color: #6b7280;
     }
 
     @top-right {
         content: "AI Research Report";
         font-family: 'Inter', sans-serif;
-        font-size: 9pt;
+        font-size: 8pt;
         color: #6b7280;
     }
 }
@@ -135,10 +135,11 @@ blockquote {
 table {
     width: 100%;
     border-collapse: collapse;
+    table-layout: fixed;
     margin: 1em 0;
     font-family: 'Inter', sans-serif;
-    font-size: 10pt;
-    page-break-inside: avoid;
+    font-size: 7.5pt;
+    page-break-inside: auto;
 }
 
 thead {
@@ -147,14 +148,23 @@ thead {
 }
 
 th {
-    padding: 0.6em 0.8em;
+    padding: 5pt 4pt;
     text-align: left;
     font-weight: 600;
+    font-size: 7.5pt;
+    word-break: break-word;
+    word-wrap: break-word;
+    vertical-align: top;
 }
 
 td {
-    padding: 0.5em 0.8em;
+    padding: 4.5pt 4pt;
     border-bottom: 1px solid #e5e7eb;
+    font-size: 7.2pt;
+    line-height: 1.35;
+    word-break: break-word;
+    word-wrap: break-word;
+    vertical-align: top;
 }
 
 tr:nth-child(even) td {
