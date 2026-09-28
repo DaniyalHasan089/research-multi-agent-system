@@ -85,17 +85,26 @@ _ARXIV_BATCH_SLEEP_S = 0.2
 
 
 def normalize_title(title: str) -> str:
-    """Strip common title chrome and collapse whitespace."""
+    """Strip common title chrome, publisher suffixes, brackets, and collapse whitespace."""
     t = (title or "").strip()
     if not t:
         return "Untitled"
 
-    # Strip leading "Figure N from " (case insensitive)
+    # Strip leading "[PDF] ", "[HTML] ", "Figure N from " (case insensitive)
+    t = re.sub(r"^\[(?:PDF|HTML|DOC)\]\s*", "", t, flags=re.IGNORECASE)
     t = re.sub(r"^Figure\s+\d+\s+from\s+", "", t, flags=re.IGNORECASE)
 
-    # Strip trailing " | Semantic Scholar" / " | Proceedings of..." chrome
-    t = re.sub(r"\s*\|\s*Semantic Scholar\s*$", "", t, flags=re.IGNORECASE)
-    t = re.sub(r"\s*\|\s*Proceedings of.*$", "", t, flags=re.IGNORECASE)
+    # Strip trailing publisher/platform chrome
+    t = re.sub(
+        r"\s*\|\s*(?:IEEE(?:\s+Xplore|\s+Technology\s+Navigator)?|Semantic\s+Scholar|Proceedings\s+of.*|Nature|ScienceDirect|Springer(?:Link)?|arXiv(?:\s+Preprint)?|ResearchGate|Wiley|ACM(?:\s+Digital\s+Library)?)\s*$",
+        "",
+        t,
+        flags=re.IGNORECASE,
+    )
+    t = re.sub(r"\s*-\s*(?:Semantic\s+Scholar|arXiv|IEEE\s+Xplore)\s*$", "", t, flags=re.IGNORECASE)
+
+    # CRITICAL: Replace ANY remaining pipe '|' with ' - ' to prevent breaking Markdown tables
+    t = t.replace("|", " - ")
 
     # Collapse whitespace
     t = re.sub(r"\s+", " ", t).strip()
@@ -104,6 +113,19 @@ def normalize_title(title: str) -> str:
     t = re.sub(r"([a-z])([A-Z])", r"\1 \2", t)
 
     return t or "Untitled"
+
+
+def _is_valid_academic_paper(url: str, title: str) -> bool:
+    """Filter out taxonomy navigation pages, category tags, and search portals."""
+    u = (url or "").lower()
+    t = (title or "").lower()
+    # Exclude taxonomy/tag/directory landing pages
+    if any(bad in u for bad in ["technav.ieee.org", "/tag/", "/tags/", "/topic/", "/topics/", "/browse/", "/category/"]):
+        return False
+    # Exclude title tags that indicate directory pages
+    if any(bad in t for bad in ["technology navigator", "browse articles", "subject index"]):
+        return False
+    return True
 
 
 from utils.arxiv_utils import extract_arxiv_id, batch_fetch_arxiv_metadata, format_authors
@@ -313,8 +335,8 @@ def run(state: ResearchState) -> ResearchState:
             for r in raw_results:
                 content = (r.get("content") or r.get("snippet") or "").strip()
                 url = r.get("url", "").strip()
-                if len(content) > 80 and url:
-                    raw_title = r.get("title", "Untitled").strip()
+                raw_title = r.get("title", "Untitled").strip()
+                if len(content) > 80 and url and _is_valid_academic_paper(url, raw_title):
                     clean_title = normalize_title(raw_title)
                     identity = extract_identity(url, clean_title, content)
                     canonical = identity.get("canonical_url") or url

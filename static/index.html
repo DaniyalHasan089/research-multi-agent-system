@@ -1888,8 +1888,12 @@
         </div>`;
 
       const rows = papers.map((p, i) => {
-        const title = escapeHtml(p.title || 'Academic Research Study');
-        const url = p.url || '#';
+        let rawTitle = (p.title || 'Academic Research Study').trim();
+        rawTitle = rawTitle.replace(/^\[(?:PDF|HTML|DOC)\]\s*/i, '');
+        rawTitle = rawTitle.replace(/\s*\|\s*(?:IEEE.*|Semantic\s+Scholar|Proceedings.*|Nature|ScienceDirect|Springer.*|arXiv.*)$/i, '');
+        rawTitle = rawTitle.replace(/\|/g, ' - ');
+        const title = escapeHtml(rawTitle);
+        const url = escapeHtml(p.url || '#');
 
         // Author: never empty, null, unknown, or generic placeholder
         let rawAuthor = (p.author || '').trim();
