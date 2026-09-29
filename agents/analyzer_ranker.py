@@ -120,6 +120,7 @@ Respond ONLY with a valid JSON object in this exact format:
   "methodology": "<2-3 sentences: what specific methods, models, datasets, or experimental setups does it use? Be precise about techniques.>",
   "findings": "<3-4 sentences: what are the key quantitative or qualitative results? Include specific numbers or benchmarks ONLY when they appear in the provided text.>",
   "limitations": "<2 sentences: what are the main limitations, assumptions, or open questions left by this paper? Must be analytical and substantive, never empty.>",
+  "research_gap": "<2-3 sentences: what specific research gap does this paper leave open? What should future work investigate that this paper did not address? Be concrete and grounded in the paper's actual content — do not fabricate.>",
   "relevance_score": <number from 0 to 10, where 10 is perfectly relevant to the specific conceptual boundary>,
   "relevance_rationale": "<1-2 sentences explaining why this score was assigned, explicitly noting whether it matches the conceptual boundary>",
   "speedup_claimed": <number or null — ONLY if an explicit speedup/factor/improvement number appears in the provided text; otherwise null>,
@@ -387,6 +388,13 @@ Verify whether this paper addresses the intended conceptual boundary ('{clarifie
                 analysis["limitations"] = "Requires further empirical evaluation across diverse computational budgets and larger open-domain benchmarks."
             else:
                 analysis["limitations"] = lim
+
+            # Ensure research_gap is never empty, null, or 'N/A'
+            gap = (analysis.get("research_gap") or "").strip()
+            if not gap or any(gap.lower() == bad for bad in ["n/a", "none", "null", "unknown", "—", "-", "not stated", ""]):
+                analysis["research_gap"] = analysis["limitations"]
+            else:
+                analysis["research_gap"] = gap
 
             # Ensure methodology is never empty, null, or 'N/A'
             meth = (analysis.get("methodology") or "").strip()

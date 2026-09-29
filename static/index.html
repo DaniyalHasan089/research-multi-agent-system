@@ -1246,6 +1246,113 @@
         justify-content: center;
       }
     }
+
+    /* ── Research Gap Section ────────────────────────────────── */
+    .research-gap-section {
+      margin-top: 2.5rem;
+      background: rgba(15, 18, 26, 0.85);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(99, 102, 241, 0.22);
+      border-radius: var(--radius-xl);
+      overflow: hidden;
+      box-shadow: var(--shadow-md);
+      animation: fadeIn 0.5s ease;
+    }
+
+    .research-gap-header {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-family: var(--font-heading);
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #ffffff;
+      padding: 1.1rem 1.5rem;
+      background: linear-gradient(90deg, rgba(99, 102, 241, 0.18), rgba(6, 182, 212, 0.08));
+      border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+    }
+
+    .research-gap-header svg {
+      color: var(--cyan);
+      flex-shrink: 0;
+    }
+
+    /* override: tighter padding for per-paper gap items */
+    .research-gap-body {
+      padding: 0.75rem 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .gap-item {
+      padding: 1.1rem 1.6rem;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      transition: background 0.2s ease;
+    }
+
+    .gap-item:last-child {
+      border-bottom: none;
+    }
+
+    .gap-item:hover {
+      background: rgba(99, 102, 241, 0.05);
+    }
+
+    .gap-item-header {
+      display: flex;
+      align-items: baseline;
+      gap: 0.65rem;
+      margin-bottom: 0.55rem;
+    }
+
+    .gap-item-num {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--cyan);
+      background: rgba(6, 182, 212, 0.12);
+      border: 1px solid rgba(6, 182, 212, 0.3);
+      border-radius: 4px;
+      padding: 0.1rem 0.45rem;
+      flex-shrink: 0;
+    }
+
+    .gap-item-title {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--primary-light);
+      text-decoration: none;
+      line-height: 1.4;
+      transition: color 0.2s ease;
+    }
+
+    .gap-item-title:hover {
+      color: #ffffff;
+      text-decoration: underline;
+    }
+
+    .gap-item-text {
+      font-size: 0.875rem;
+      line-height: 1.75;
+      color: var(--text-muted);
+      margin: 0;
+      text-align: justify;
+      padding-left: 2.1rem;
+    }
+
+    .research-gap-para {
+      font-size: 0.92rem;
+      line-height: 1.8;
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+      padding: 0 1.6rem;
+      text-align: justify;
+    }
+
+    .research-gap-para:last-child {
+      margin-bottom: 0;
+    }
   </style>
 </head>
 <body>
@@ -1994,6 +2101,46 @@
             </tbody>
           </table>
         </div>`;
+
+      // ── Research Gap (per-paper) ─────────────────────────────────
+      const gapPapers = (data.paper_analyses || []).slice(0, 15);
+      if (gapPapers.length > 0) {
+        const gapSection = document.createElement('div');
+        gapSection.className = 'research-gap-section';
+
+        const gapItems = gapPapers.map((p, i) => {
+          let rawTitle = (p.title || 'Academic Research Study').trim();
+          rawTitle = rawTitle.replace(/^\[(?:PDF|HTML|DOC)\]\s*/i, '');
+          rawTitle = rawTitle.replace(/\s*\|\s*(?:IEEE.*|Semantic\s+Scholar|Proceedings.*|Nature|ScienceDirect|Springer.*|arXiv.*)/i, '');
+          rawTitle = rawTitle.replace(/\|/g, ' - ');
+          const pUrl = p.url || '#';
+          const gapText = escapeHtml(
+            (p.research_gap || p.limitations || 'Requires further empirical investigation beyond the scope of this study.').trim()
+          );
+          return `
+            <div class="gap-item">
+              <div class="gap-item-header">
+                <span class="gap-item-num">${i + 1}</span>
+                <a class="gap-item-title" href="${escapeHtml(pUrl)}" target="_blank" rel="noopener noreferrer">
+                  ${escapeHtml(rawTitle)}<span class="paper-link-icon">↗</span>
+                </a>
+              </div>
+              <p class="gap-item-text">${gapText}</p>
+            </div>`;
+        }).join('');
+
+        gapSection.innerHTML = `
+          <div class="research-gap-header">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            Research Gap
+          </div>
+          <div class="research-gap-body">${gapItems}</div>`;
+        body.appendChild(gapSection);
+      }
 
       // Show Report Section and Smooth Scroll
       section.style.display = 'block';
