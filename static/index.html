@@ -2102,33 +2102,19 @@
           </table>
         </div>`;
 
-      // ── Research Gap (per-paper) ─────────────────────────────────
-      const gapPapers = (data.paper_analyses || []).slice(0, 15);
-      if (gapPapers.length > 0) {
+      // ── Research Gap (summarized) ─────────────────────────────────
+      const gapMd = data.report_markdown || currentMarkdown || '';
+      const gapMatch = gapMd.match(/##\s+Research\s+Gap\s*\n([\s\S]*)/i);
+      if (gapMatch) {
+        const gapText = gapMatch[1].trim();
+        const gapParagraphs = gapText
+          .split(/\n\n+/)
+          .filter(para => para.trim())
+          .map(para => `<p class="research-gap-para">${escapeHtml(para.trim())}</p>`)
+          .join('');
+
         const gapSection = document.createElement('div');
         gapSection.className = 'research-gap-section';
-
-        const gapItems = gapPapers.map((p, i) => {
-          let rawTitle = (p.title || 'Academic Research Study').trim();
-          rawTitle = rawTitle.replace(/^\[(?:PDF|HTML|DOC)\]\s*/i, '');
-          rawTitle = rawTitle.replace(/\s*\|\s*(?:IEEE.*|Semantic\s+Scholar|Proceedings.*|Nature|ScienceDirect|Springer.*|arXiv.*)/i, '');
-          rawTitle = rawTitle.replace(/\|/g, ' - ');
-          const pUrl = p.url || '#';
-          const gapText = escapeHtml(
-            (p.research_gap || p.limitations || 'Requires further empirical investigation beyond the scope of this study.').trim()
-          );
-          return `
-            <div class="gap-item">
-              <div class="gap-item-header">
-                <span class="gap-item-num">${i + 1}</span>
-                <a class="gap-item-title" href="${escapeHtml(pUrl)}" target="_blank" rel="noopener noreferrer">
-                  ${escapeHtml(rawTitle)}<span class="paper-link-icon">↗</span>
-                </a>
-              </div>
-              <p class="gap-item-text">${gapText}</p>
-            </div>`;
-        }).join('');
-
         gapSection.innerHTML = `
           <div class="research-gap-header">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -2138,7 +2124,7 @@
             </svg>
             Research Gap
           </div>
-          <div class="research-gap-body">${gapItems}</div>`;
+          <div class="research-gap-body">${gapParagraphs}</div>`;
         body.appendChild(gapSection);
       }
 

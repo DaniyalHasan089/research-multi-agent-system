@@ -3,8 +3,8 @@ Agent 4: Report Writer
 
 Produces:
   1. A pristine, strictly formatted 7-column Markdown table (up to 15 papers).
-  2. A "Research Gap" section with one entry per paper, built deterministically
-     from the `research_gap` field extracted by the Analyzer & Ranker.
+  2. A summarized "Research Gap" section written by the LLM, grounded in the
+     limitations and findings of all reviewed papers combined.
 
 Guarantees:
   - Exactly 7 columns with zero column shifts or unclosed brackets.
@@ -15,7 +15,27 @@ Output is written to ResearchState: report_markdown
 """
 
 import re
+from langchain_core.messages import HumanMessage, SystemMessage
 from graph.state import ResearchState
+from utils.llm_factory import get_llm, extract_text
+
+
+_RESEARCH_GAP_PROMPT = """You are an expert academic research analyst. Based on the reviewed papers below, write a concise "Research Gap" section in plain academic prose.
+
+Requirements:
+- Start directly with the content (do NOT write a heading — it is added automatically)
+- 3–5 paragraphs maximum
+- Ground every claim in the actual limitations and findings listed below
+- Identify specific methodological, empirical, or theoretical gaps that remain unaddressed
+- Do NOT use bullet points or lists — only flowing prose paragraphs
+- Do NOT fabricate facts, numbers, or paper titles not mentioned below
+- Be specific and actionable (what should future research do?)
+
+Research Question: {user_query}
+
+Reviewed Papers Summary:
+{papers_summary}
+"""
 
 
 def _sanitize_cell(text: str) -> str:
@@ -25,16 +45,6 @@ def _sanitize_cell(text: str) -> str:
     clean = text.replace("\r", " ").replace("\n", " ").replace("\t", " ")
     clean = clean.replace("|", " - ")
     clean = re.sub(r"\s+", " ", clean).strip()
-    return clean
-
-
-def _sanitize_prose(text: str) -> str:
-    """Sanitize prose text (allows newlines, strips pipe chars)."""
-    if not text:
-        return ""
-    clean = text.replace("|", " - ")
-    clean = re.sub(r"\r\n|\r", "\n", clean)
-    clean = re.sub(r" {2,}", " ", clean).strip()
     return clean
 
 
@@ -49,7 +59,6 @@ def _clean_title(raw: str) -> str:
         t,
         flags=re.IGNORECASE,
     )
-    # Replace brackets so they don't break Markdown link syntax
     t = _sanitize_cell(t).replace("[", "(").replace("]", ")")
     return t or "Academic Research Study"
 
@@ -110,36 +119,49 @@ def generate_markdown_table(paper_analyses: list[dict]) -> str:
     return "\n".join(rows)
 
 
-def generate_research_gap_section(paper_analyses: list[dict]) -> str:
+def generate_research_gap(paper_analyses: list[dict], user_query: str) -> str:
     """
-    Build a 'Research Gap' section with one numbered entry per paper.
-    Each entry shows the paper title (as a link) and its specific research gap.
+    Use the LLM to synthesize a single summarized Research Gap section
+    grounded in all reviewed papers combined. Returns Markdown with heading.
     """
-    if not paper_analyses:
-        return ""
-
-    lines = ["\n\n## Research Gap\n"]
-
+    papers_summary_lines = []
     for i, p in enumerate(paper_analyses[:15], 1):
-        safe_title = _clean_title(p.get("title") or "Academic Research Study")
-        url = (p.get("url") or "https://arxiv.org").strip()
-
-        # Prefer the dedicated research_gap field; fall back to limitations
-        gap_text = _sanitize_prose(
-            p.get("research_gap") or p.get("limitations") or
-            "Requires further empirical investigation beyond the scope of this study."
+        title = (p.get("title") or "Untitled").strip()
+        limitations = (p.get("limitations") or "Not stated").strip()
+        findings = (p.get("findings") or p.get("summary") or "Not stated").strip()
+        papers_summary_lines.append(
+            f"[{i}] {title}\n"
+            f"    Findings   : {findings[:300]}\n"
+            f"    Limitations: {limitations[:300]}"
         )
+    papers_summary = "\n\n".join(papers_summary_lines)
 
-        lines.append(f"### {i}. [{safe_title}]({url})\n")
-        lines.append(f"{gap_text}\n")
+    prompt = _RESEARCH_GAP_PROMPT.format(
+        user_query=user_query,
+        papers_summary=papers_summary,
+    )
 
-    return "\n".join(lines)
+    try:
+        llm = get_llm(task="heavy")
+        messages = [
+            SystemMessage(content="You are an expert academic research analyst. Write clear, grounded academic prose. Never fabricate citations or facts."),
+            HumanMessage(content=prompt),
+        ]
+        response = llm.invoke(messages)
+        gap_text = extract_text(response.content).strip()
+        if not gap_text:
+            gap_text = "Further research is needed to address the methodological and empirical limitations identified across the reviewed literature."
+    except Exception as e:
+        print(f"[ReportWriter] ⚠ Research Gap generation failed: {e}")
+        gap_text = "Further research is needed to address the methodological and empirical limitations identified across the reviewed literature."
+
+    return f"\n\n## Research Gap\n\n{gap_text}"
 
 
 def run(state: ResearchState) -> ResearchState:
     """
-    Report Writer node — produces a 7-column Markdown table and a per-paper
-    Research Gap section, all built deterministically from paper_analyses.
+    Report Writer node — produces a 7-column Markdown table followed by
+    an LLM-synthesized Research Gap section covering all reviewed papers.
 
     Args:
         state: Current ResearchState with 'user_query' and 'paper_analyses'.
@@ -152,7 +174,10 @@ def run(state: ResearchState) -> ResearchState:
 
     print(f"[ReportWriter] Building report for '{user_query}' ({len(paper_analyses)} papers)")
     table_md = generate_markdown_table(paper_analyses)
-    gap_md = generate_research_gap_section(paper_analyses)
+
+    print(f"[ReportWriter] Generating summarized Research Gap section...")
+    gap_md = generate_research_gap(paper_analyses, user_query)
+
     report_markdown = table_md + gap_md
     print(f"[ReportWriter] Report complete ({len(report_markdown)} chars)")
 
