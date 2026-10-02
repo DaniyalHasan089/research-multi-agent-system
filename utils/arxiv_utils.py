@@ -8,6 +8,7 @@ import ssl
 import time
 import urllib.request
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 try:
     import httpx
@@ -25,7 +26,8 @@ _ATOM_NS = {
     "arxiv": "http://arxiv.org/schemas/atom",
 }
 
-_TIMEOUT_S = 15.0
+_TIMEOUT_S = 8.0        # API query timeout (reduced from 15s to fail fast)
+_HTML_TIMEOUT_S = 5.0   # HTML scrape fallback timeout
 _USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 
@@ -175,7 +177,7 @@ def _fetch_html_authors(base_id: str) -> dict:
     url = f"https://arxiv.org/abs/{base_id}"
     try:
         req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
-        with urllib.request.urlopen(req, timeout=8.0, context=_SSL_CONTEXT) as resp:
+        with urllib.request.urlopen(req, timeout=_HTML_TIMEOUT_S, context=_SSL_CONTEXT) as resp:
             html = resp.read().decode("utf-8", errors="replace")
 
         # Extract title
@@ -223,7 +225,7 @@ def fetch_arxiv_metadata(arxiv_id: str) -> dict:
 
     try:
         if httpx is not None:
-            with httpx.Client(timeout=_TIMEOUT_S, headers={"User-Agent": _USER_AGENT}, verify=False) as client:
+            with httpx.Client(timeout=_TIMEOUT_S, headers={"User-Agent": _USER_AGENT}) as client:
                 resp = client.get(url)
                 if resp.status_code == 200:
                     res = _parse_atom_xml(resp.text)
@@ -262,34 +264,50 @@ def batch_fetch_arxiv_metadata(arxiv_ids: list[str]) -> dict[str, dict]:
     results: dict[str, dict] = {}
     chunk_size = 6  # Small chunks respond quickly and reliably
 
-    for i in range(0, len(clean_ids), chunk_size):
-        chunk = clean_ids[i : i + chunk_size]
-        if i > 0:
-            time.sleep(0.3)  # Respect polite request pacing
-
-        id_str = ",".join(chunk)
-        url = f"https://export.arxiv.org/api/query?id_list={id_str}"
-        try:
-            if httpx is not None:
-                with httpx.Client(timeout=_TIMEOUT_S, headers={"User-Agent": _USER_AGENT}, verify=False) as client:
+    # Reuse a single httpx.Client across all chunks to avoid repeated TLS handshakes
+    if httpx is not None:
+        with httpx.Client(timeout=_TIMEOUT_S, headers={"User-Agent": _USER_AGENT}) as client:
+            for i in range(0, len(clean_ids), chunk_size):
+                chunk = clean_ids[i : i + chunk_size]
+                if i > 0:
+                    time.sleep(0.3)  # Respect polite request pacing
+                id_str = ",".join(chunk)
+                url = f"https://export.arxiv.org/api/query?id_list={id_str}"
+                try:
                     resp = client.get(url)
                     if resp.status_code == 200:
                         parsed = _parse_atom_xml(resp.text)
                         results.update(parsed)
-            else:
+                except Exception as e:
+                    print(f"[arXivUtils] Batch query failed for chunk ({len(chunk)} ids): {e}")
+    else:
+        for i in range(0, len(clean_ids), chunk_size):
+            chunk = clean_ids[i : i + chunk_size]
+            if i > 0:
+                time.sleep(0.3)  # Respect polite request pacing
+            id_str = ",".join(chunk)
+            url = f"https://export.arxiv.org/api/query?id_list={id_str}"
+            try:
                 req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
                 with urllib.request.urlopen(req, timeout=_TIMEOUT_S, context=_SSL_CONTEXT) as resp:
                     xml_text = resp.read().decode("utf-8", errors="replace")
                     parsed = _parse_atom_xml(xml_text)
                     results.update(parsed)
-        except Exception as e:
-            print(f"[arXivUtils] Batch query failed for chunk ({len(chunk)} ids): {e}")
+            except Exception as e:
+                print(f"[arXivUtils] Batch query failed for chunk ({len(chunk)} ids): {e}")
 
-    # For any paper in clean_ids that didn't get authors from the batch, do HTML fallback
-    for b in clean_ids:
-        if not results.get(b) or not results[b].get("author"):
-            fb = _fetch_html_authors(b)
-            if fb:
-                results[b] = fb
+    # Concurrent HTML fallback for papers still missing authors after the batch
+    missing = [b for b in clean_ids if not results.get(b) or not results[b].get("author")]
+    if missing:
+        with ThreadPoolExecutor(max_workers=6) as executor:
+            future_to_id = {executor.submit(_fetch_html_authors, b): b for b in missing}
+            for future in as_completed(future_to_id):
+                b = future_to_id[future]
+                try:
+                    fb = future.result()
+                    if fb:
+                        results[b] = fb
+                except Exception:
+                    pass
 
     return results

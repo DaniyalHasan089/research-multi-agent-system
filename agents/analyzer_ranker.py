@@ -131,7 +131,7 @@ Respond ONLY with a valid JSON object in this exact format:
 Be thorough, accurate, and objective. Use specific details from the paper content. Do not invent numbers, labs, or claims absent from the provided text. Do not include text outside the JSON."""
 
 
-from utils.arxiv_utils import extract_arxiv_id, fetch_arxiv_metadata, format_authors
+from utils.arxiv_utils import extract_arxiv_id, format_authors
 
 
 def _clean_fallback_author(raw_author: str | None, paper: dict, user_query: str) -> str:
@@ -140,23 +140,13 @@ def _clean_fallback_author(raw_author: str | None, paper: dict, user_query: str)
     Never returns generic placeholders like 'Academic Research Team'.
     """
     # 1. Primary ground-truth: paper author already enriched from arXiv/publisher
+    #    (batch_fetch_arxiv_metadata ran during the researcher phase — trust it)
     p_auth = (paper.get("author") or "").strip()
     if p_auth and not any(bad in p_auth.lower() for bad in ["unknown", "n/a", "none", "null", "undefined", "author", "untitled", "academic research team"]):
         return p_auth
 
-    # 2. arXiv resolution: if arxiv_id exists, fetch directly from arXiv API or HTML
-    aid = paper.get("arxiv_id") or extract_arxiv_id(paper.get("url", "")) or extract_arxiv_id(paper.get("title", ""))
-    if aid:
-        meta = fetch_arxiv_metadata(aid)
-        if meta and meta.get("author"):
-            paper["author"] = meta["author"]
-            if meta.get("title") and not paper.get("title"):
-                paper["title"] = meta["title"]
-            if meta.get("year") and not paper.get("year"):
-                paper["year"] = meta["year"]
-            return meta["author"]
-
-    # 3. LLM candidate: if LLM extracted valid author names from paper text
+    # 2. LLM candidate: if LLM extracted valid author names from paper text
+    #    (skipping a redundant per-paper HTTP fetch here — already done in batch by the researcher)
     cand = (raw_author or "").strip()
     if cand and not any(bad in cand.lower() for bad in ["unknown", "n/a", "none", "null", "undefined", "author", "untitled", "academic research team"]):
         # Split names if comma or 'and' separated to ensure clean presentation

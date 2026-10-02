@@ -38,6 +38,25 @@ Reviewed Papers Summary:
 """
 
 
+_RESEARCH_OBJECTIVES_PROMPT = """You are an expert academic research analyst. Based on the research gaps identified below, write a "Research Objectives" section in plain academic prose.
+
+Requirements:
+- Start directly with a short introductory sentence that frames the objectives, then list them (do NOT write a heading — it is added automatically)
+- Provide exactly 3–5 numbered objectives
+- Each objective must directly address one or more of the identified research gaps
+- Each objective should be specific, measurable, and actionable — describe what the research will do, not just what it will study
+- Write each objective as a full sentence beginning with an action verb (e.g., "Investigate...", "Develop...", "Evaluate...", "Establish...", "Examine...")
+- After each numbered objective, add one sentence explaining how it addresses the corresponding gap
+- Do NOT fabricate facts or reference papers not mentioned in the gaps
+- Use formal academic prose throughout
+
+Research Question: {user_query}
+
+Identified Research Gaps:
+{gap_text}
+"""
+
+
 def _sanitize_cell(text: str) -> str:
     """Sanitize any string for a Markdown table cell."""
     if not text:
@@ -158,6 +177,33 @@ def generate_research_gap(paper_analyses: list[dict], user_query: str) -> str:
     return f"\n\n## Research Gap\n\n{gap_text}"
 
 
+def generate_research_objectives(gap_text: str, user_query: str) -> str:
+    """
+    Use the LLM to generate a Research Objectives section grounded in the
+    identified research gaps. Returns Markdown with heading.
+    """
+    prompt = _RESEARCH_OBJECTIVES_PROMPT.format(
+        user_query=user_query,
+        gap_text=gap_text,
+    )
+
+    try:
+        llm = get_llm(task="heavy")
+        messages = [
+            SystemMessage(content="You are an expert academic research analyst. Write clear, grounded academic prose. Never fabricate citations or facts."),
+            HumanMessage(content=prompt),
+        ]
+        response = llm.invoke(messages)
+        objectives_text = extract_text(response.content).strip()
+        if not objectives_text:
+            objectives_text = "Future research should systematically address the methodological and empirical limitations identified in the literature through targeted experimental and theoretical investigation."
+    except Exception as e:
+        print(f"[ReportWriter] ⚠ Research Objectives generation failed: {e}")
+        objectives_text = "Future research should systematically address the methodological and empirical limitations identified in the literature through targeted experimental and theoretical investigation."
+
+    return f"\n\n## Research Objectives\n\n{objectives_text}"
+
+
 def run(state: ResearchState) -> ResearchState:
     """
     Report Writer node — produces a 7-column Markdown table followed by
@@ -178,7 +224,13 @@ def run(state: ResearchState) -> ResearchState:
     print(f"[ReportWriter] Generating summarized Research Gap section...")
     gap_md = generate_research_gap(paper_analyses, user_query)
 
-    report_markdown = table_md + gap_md
+    # Strip the heading prefix to pass only the prose to the objectives generator
+    gap_prose = re.sub(r"^\s*##\s*Research Gap\s*\n+", "", gap_md).strip()
+
+    print(f"[ReportWriter] Generating Research Objectives section...")
+    objectives_md = generate_research_objectives(gap_prose, user_query)
+
+    report_markdown = table_md + gap_md + objectives_md
     print(f"[ReportWriter] Report complete ({len(report_markdown)} chars)")
 
     return {**state, "report_markdown": report_markdown}
