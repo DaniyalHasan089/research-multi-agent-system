@@ -38,15 +38,17 @@ Reviewed Papers Summary:
 """
 
 
-_RESEARCH_OBJECTIVES_PROMPT = """You are an expert academic research analyst. Based on the research gaps identified below, write a "Research Objectives" section in plain academic prose.
+_RESEARCH_OBJECTIVES_PROMPT = """You are an expert academic research analyst. Based on the research gaps identified below, write a "Research Objectives" section.
 
 Requirements:
-- Start directly with a short introductory sentence that frames the objectives, then list them (do NOT write a heading — it is added automatically)
-- Provide exactly 3–5 numbered objectives
-- Each objective must directly address one or more of the identified research gaps
-- Each objective should be specific, measurable, and actionable — describe what the research will do, not just what it will study
-- Write each objective as a full sentence beginning with an action verb (e.g., "Investigate...", "Develop...", "Evaluate...", "Establish...", "Examine...")
-- After each numbered objective, add one sentence explaining how it addresses the corresponding gap
+- Start with ONE short paragraph (2–3 sentences) that frames the overall strategy for addressing the identified gaps
+- Then produce exactly 8–10 actionable recommendations, ordered strictly from highest to lowest priority (1 = most important, 10 = least important)
+- Format EACH recommendation as a Markdown level-3 subheading using this exact pattern:
+    ### N. Recommendation Title
+  where N is the sequential number (1, 2, 3 …) — do NOT include any priority label in the heading
+- Under each subheading, write 2–3 sentences of flowing academic prose that describes specifically what should be done and which identified gap it addresses
+- Do NOT add bullet points, nested lists, or extra headings
+- Do NOT write the section heading itself — it is added automatically
 - Do NOT fabricate facts or reference papers not mentioned in the gaps
 - Use formal academic prose throughout
 
@@ -201,7 +203,7 @@ def generate_research_objectives(gap_text: str, user_query: str) -> str:
         print(f"[ReportWriter] ⚠ Research Objectives generation failed: {e}")
         objectives_text = "Future research should systematically address the methodological and empirical limitations identified in the literature through targeted experimental and theoretical investigation."
 
-    return f"\n\n## Research Objectives\n\n{objectives_text}"
+    return f"\n\n## How to Cater the Research Gaps\n\n{objectives_text}"
 
 
 def run(state: ResearchState) -> ResearchState:
@@ -219,6 +221,10 @@ def run(state: ResearchState) -> ResearchState:
     paper_analyses = state.get("paper_analyses", [])
 
     print(f"[ReportWriter] Building report for '{user_query}' ({len(paper_analyses)} papers)")
+
+    # Document title block
+    title_md = f"# {user_query}\n\n---"
+
     table_md = generate_markdown_table(paper_analyses)
 
     print(f"[ReportWriter] Generating summarized Research Gap section...")
@@ -227,10 +233,10 @@ def run(state: ResearchState) -> ResearchState:
     # Strip the heading prefix to pass only the prose to the objectives generator
     gap_prose = re.sub(r"^\s*##\s*Research Gap\s*\n+", "", gap_md).strip()
 
-    print(f"[ReportWriter] Generating Research Objectives section...")
+    print(f"[ReportWriter] Generating 'How to Cater the Research Gaps' section...")
     objectives_md = generate_research_objectives(gap_prose, user_query)
 
-    report_markdown = table_md + gap_md + objectives_md
+    report_markdown = title_md + "\n\n" + table_md + gap_md + objectives_md
     print(f"[ReportWriter] Report complete ({len(report_markdown)} chars)")
 
     return {**state, "report_markdown": report_markdown}

@@ -66,6 +66,13 @@ def _get_pdf_css() -> str:
             margin-top: 12pt;
             margin-bottom: 6pt;
         }
+        h3 {
+            font-size: 10pt;
+            font-weight: bold;
+            color: #4f46e5;
+            margin-top: 10pt;
+            margin-bottom: 4pt;
+        }
         p {
             margin-bottom: 6pt;
             text-align: justify;
@@ -118,7 +125,7 @@ def _get_web_css() -> str:
         return css_path.read_text(encoding="utf-8")
     return """
         body { font-family: sans-serif; max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
-        h1 { color: #1e1b4b; } h2 { color: #312e81; }
+        h1 { color: #1e1b4b; } h2 { color: #312e81; } h3 { color: #4f46e5; font-size: 1rem; margin-top: 1.2rem; }
         table { width: 100%; border-collapse: collapse; table-layout: fixed; }
         th, td { padding: 8px; border: 1px solid #e5e7eb; word-break: break-word; }
         th { background: #4f46e5; color: white; }
