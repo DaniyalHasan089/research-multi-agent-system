@@ -301,18 +301,7 @@ async def _analyze_paper_async(
         venue = paper.get("venue") or ""
         author = paper.get("author") or ""
 
-        # Pre-resolve author from arXiv if missing on paper dict
-        if arxiv_id and (not author or any(bad in author.lower() for bad in ["unknown", "academic research team"])):
-            meta = fetch_arxiv_metadata(arxiv_id)
-            if meta and meta.get("author"):
-                author = meta["author"]
-                paper["author"] = author
-                if meta.get("title") and title in ["Untitled", ""]:
-                    title = meta["title"]
-                    paper["title"] = title
-                if meta.get("year") and not year:
-                    year = meta["year"]
-                    paper["year"] = year
+        # Author already enriched by batch_fetch_arxiv_metadata in the researcher phase
 
         # Truncate content to avoid exceeding context window
         max_content_chars = 5000

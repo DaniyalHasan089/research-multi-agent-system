@@ -3,8 +3,9 @@ Agent 4: Report Writer
 
 Produces:
   1. A pristine, strictly formatted 7-column Markdown table (up to 15 papers).
-  2. A summarized "Research Gap" section written by the LLM, grounded in the
-     limitations and findings of all reviewed papers combined.
+  2. A summarized "Research Gap" section written by the LLM.
+  3. A "How to Cater the Research Gaps" section (8–10 priority-ordered recommendations).
+  4. A "Methodology" section with per-objective research methods.
 
 Guarantees:
   - Exactly 7 columns with zero column shifts or unclosed brackets.
@@ -38,16 +39,13 @@ Reviewed Papers Summary:
 """
 
 
-_RESEARCH_OBJECTIVES_PROMPT = """You are an expert academic research analyst. Based on the research gaps identified below, write a "Research Objectives" section.
+_RESEARCH_OBJECTIVES_PROMPT = """You are an expert academic research analyst. Based on the research gaps identified below, write a "How to Cater the Research Gaps" section in plain academic prose.
 
 Requirements:
-- Start with ONE short paragraph (2–3 sentences) that frames the overall strategy for addressing the identified gaps
-- Then produce exactly 8–10 actionable recommendations, ordered strictly from highest to lowest priority (1 = most important, 10 = least important)
-- Format EACH recommendation as a Markdown level-3 subheading using this exact pattern:
-    ### N. Recommendation Title
-  where N is the sequential number (1, 2, 3 …) — do NOT include any priority label in the heading
-- Under each subheading, write 2–3 sentences of flowing academic prose that describes specifically what should be done and which identified gap it addresses
-- Do NOT add bullet points, nested lists, or extra headings
+- Write 4–6 coherent paragraphs that collectively address all the identified research gaps
+- Organize the paragraphs thematically by grouping related recommendations together, ordered from most critical to least critical
+- Each paragraph should cover what should be done, why it matters, and which gap(s) it addresses
+- Do NOT use bullet points, numbered lists, or subheadings — only flowing prose paragraphs
 - Do NOT write the section heading itself — it is added automatically
 - Do NOT fabricate facts or reference papers not mentioned in the gaps
 - Use formal academic prose throughout
@@ -57,6 +55,74 @@ Research Question: {user_query}
 Identified Research Gaps:
 {gap_text}
 """
+
+
+_METHODOLOGY_PROMPT = """You are an expert academic research analyst. Based on the research recommendations below, write a "Methodology" section in plain academic prose that describes the research methods to be adopted in order to achieve those recommendations.
+
+Requirements:
+- Write 4–6 coherent paragraphs that together describe a comprehensive research methodology
+- Organize paragraphs by methodological theme (e.g., research design, data collection, experimental setup, evaluation and metrics, validation and replication) rather than by individual recommendation
+- Each paragraph should clearly connect the methods described to one or more of the recommendations, explaining why those methods are appropriate
+- Cover the following across the paragraphs: primary research design or approach, data collection methods and sources or benchmarks, analysis techniques and evaluation metrics, and validation or replication strategies
+- Do NOT use bullet points, numbered lists, or subheadings — only flowing prose paragraphs
+- Do NOT write the section heading itself — it is added automatically
+- Do NOT fabricate specific tool names or datasets not grounded in the recommendations
+- Use formal academic prose throughout
+
+Research Question: {user_query}
+
+Recommendations (How to Cater the Research Gaps):
+{objectives_text}
+"""
+
+
+_METHODOLOGY_FLOW_PROMPT = """You are a research methodology expert. Based on the methodology description below, extract the key sequential phases of the research process.
+
+Output ONLY lines in this exact format — nothing else, no headings, no explanations:
+STEP: Phase Title | One concise sentence describing what happens in this phase (max 12 words).
+
+Rules:
+- Produce exactly 5–7 STEP lines in logical sequential order
+- Each title must be 2–5 words (e.g., "Research Design", "Data Collection", "Experimental Setup")
+- Each description must be one sentence, max 12 words, no full stop needed
+- Do NOT output anything other than the STEP: lines
+
+Research Methodology:
+{methodology_text}
+"""
+
+
+def _steps_to_html_flowchart(steps: list[tuple[str, str]]) -> str:
+    """Convert (title, description) step tuples into an inline HTML flow diagram."""
+    # Gradient of indigo-to-teal colours for step headers
+    box_colors = ["#4f46e5", "#6366f1", "#7c3aed", "#2563eb", "#0891b2", "#0d9488", "#059669"]
+
+    rows = []
+    for i, (title, desc) in enumerate(steps):
+        color = box_colors[i % len(box_colors)]
+        rows.append(
+            f'<table style="width:72%;margin:0 auto 0 auto;border-collapse:collapse;">'
+            f'<tr><td style="background:{color};color:white;padding:5pt 12pt;text-align:center;'
+            f'font-weight:bold;font-size:8.5pt;border:1.5pt solid {color};">'
+            f'{i + 1}. {title}</td></tr>'
+            f'<tr><td style="background:#f5f3ff;color:#1e1b4b;padding:4pt 12pt;text-align:center;'
+            f'font-size:7.5pt;border:1.5pt solid {color};border-top:none;">'
+            f'{desc}</td></tr></table>'
+        )
+        if i < len(steps) - 1:
+            rows.append(
+                '<p style="text-align:center;font-size:13pt;color:#4f46e5;margin:2pt 0;line-height:1;">&#9660;</p>'
+            )
+
+    inner = "\n".join(rows)
+    return (
+        '<div style="margin:14pt 0 4pt 0;page-break-inside:avoid;">'
+        '<p style="font-weight:bold;font-size:9pt;color:#312e81;'
+        'border-bottom:1pt solid #e5e7eb;padding-bottom:3pt;margin-bottom:10pt;">'
+        'Methodology Flow Diagram</p>'
+        + inner +
+        '</div>'
+    )
 
 
 def _sanitize_cell(text: str) -> str:
@@ -206,6 +272,76 @@ def generate_research_objectives(gap_text: str, user_query: str) -> str:
     return f"\n\n## How to Cater the Research Gaps\n\n{objectives_text}"
 
 
+def generate_methodology(objectives_text: str, user_query: str) -> str:
+    """
+    Use the LLM to generate a Methodology section with per-objective research
+    methods that mirror the numbered recommendations. Returns Markdown with heading.
+    """
+    prompt = _METHODOLOGY_PROMPT.format(
+        user_query=user_query,
+        objectives_text=objectives_text,
+    )
+
+    try:
+        llm = get_llm(task="heavy")
+        messages = [
+            SystemMessage(content="You are an expert academic research analyst. Write clear, grounded academic prose. Never fabricate citations or facts."),
+            HumanMessage(content=prompt),
+        ]
+        response = llm.invoke(messages)
+        methodology_text = extract_text(response.content).strip()
+        if not methodology_text:
+            methodology_text = "Each objective should be pursued using rigorous empirical methods appropriate to the research domain, with systematic validation and reproducibility as guiding principles."
+    except Exception as e:
+        print(f"[ReportWriter] ⚠ Methodology generation failed: {e}")
+        methodology_text = "Each objective should be pursued using rigorous empirical methods appropriate to the research domain, with systematic validation and reproducibility as guiding principles."
+
+    return f"\n\n## Methodology\n\n{methodology_text}"
+
+
+def generate_methodology_flowchart(methodology_text: str) -> str:
+    """
+    Ask the LLM to extract sequential phases from the methodology prose,
+    then render them as an inline HTML flow diagram appended after the prose.
+    Returns a raw HTML string (markdown passthrough).
+    """
+    prompt = _METHODOLOGY_FLOW_PROMPT.format(methodology_text=methodology_text)
+
+    steps: list[tuple[str, str]] = []
+    try:
+        llm = get_llm(task="light")
+        messages = [
+            SystemMessage(content="You are a research methodology expert. Output ONLY the STEP: lines as instructed. No extra text."),
+            HumanMessage(content=prompt),
+        ]
+        response = llm.invoke(messages)
+        raw = extract_text(response.content).strip()
+        for line in raw.splitlines():
+            line = line.strip()
+            if line.upper().startswith("STEP:"):
+                body = line[5:].strip()
+                if "|" in body:
+                    title, _, desc = body.partition("|")
+                    title = title.strip()
+                    desc = desc.strip().rstrip(".")
+                    if title and desc:
+                        steps.append((title, desc))
+    except Exception as e:
+        print(f"[ReportWriter] \u26a0 Methodology flowchart LLM step failed: {e}")
+
+    # Fallback: generic phases if LLM failed or returned nothing parseable
+    if not steps:
+        steps = [
+            ("Research Design", "Define objectives, scope, and the overall research approach"),
+            ("Data Collection", "Gather relevant datasets, benchmarks, and empirical sources"),
+            ("Experimental Setup", "Configure experimental conditions and control variables"),
+            ("Analysis & Evaluation", "Apply analysis techniques and measure against defined metrics"),
+            ("Validation & Replication", "Validate results through cross-validation and independent replication"),
+        ]
+
+    return "\n\n" + _steps_to_html_flowchart(steps)
+
+
 def run(state: ResearchState) -> ResearchState:
     """
     Report Writer node — produces a 7-column Markdown table followed by
@@ -236,7 +372,19 @@ def run(state: ResearchState) -> ResearchState:
     print(f"[ReportWriter] Generating 'How to Cater the Research Gaps' section...")
     objectives_md = generate_research_objectives(gap_prose, user_query)
 
-    report_markdown = title_md + "\n\n" + table_md + gap_md + objectives_md
+    # Strip heading prefix — pass only the numbered recommendations to the methodology generator
+    objectives_prose = re.sub(r"^\s*##\s*How to Cater the Research Gaps\s*\n+", "", objectives_md).strip()
+
+    print(f"[ReportWriter] Generating Methodology section...")
+    methodology_md = generate_methodology(objectives_prose, user_query)
+
+    # Strip heading to get bare prose for the flowchart step extractor
+    methodology_prose = re.sub(r"^\s*##\s*Methodology\s*\n+", "", methodology_md).strip()
+
+    print(f"[ReportWriter] Generating Methodology flow diagram...")
+    flowchart_html = generate_methodology_flowchart(methodology_prose)
+
+    report_markdown = title_md + "\n\n" + table_md + gap_md + objectives_md + methodology_md + flowchart_html
     print(f"[ReportWriter] Report complete ({len(report_markdown)} chars)")
 
     return {**state, "report_markdown": report_markdown}
