@@ -33,7 +33,14 @@ def get_llm(task: str = "default"):
 def _get_gemini(task: str):
     from langchain_google_genai import ChatGoogleGenerativeAI
 
-    api_key = os.getenv("GOOGLE_API_KEY")
+    api_key_heavy = os.getenv("GOOGLE_API_KEY_HEAVY")
+    api_key_light = os.getenv("GOOGLE_API_KEY_LIGHT")
+    
+    if task == "heavy":
+        api_key = api_key_heavy
+    else:
+        api_key = api_key_light
+
     if not api_key:
         raise EnvironmentError("GOOGLE_API_KEY is not set in the environment.")
 

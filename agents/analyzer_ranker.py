@@ -466,7 +466,7 @@ async def run(state: ResearchState) -> ResearchState:
     total = len(filtered_papers)
     print(f"[AnalyzerRanker] Concurrently analyzing {total} papers against focus: '{clarified_focus}' (top-K = {TOP_K}, concurrency = 5)")
 
-    llm = get_llm(task="heavy")
+    llm = get_llm(task="light")
     semaphore = asyncio.Semaphore(5)
 
     tasks = [

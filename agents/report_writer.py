@@ -57,34 +57,55 @@ Identified Research Gaps:
 """
 
 
-_METHODOLOGY_PROMPT = """You are an expert academic research analyst. Based on the research recommendations below, write a "Methodology" section in plain academic prose that describes the research methods to be adopted in order to achieve those recommendations.
+_METHODOLOGY_PROMPT = """You are an expert academic research analyst and principal investigator. Based on the research question, recommendations, and reviewed literature context below, write a comprehensive, highly concrete "Methodology" section in formal academic prose.
 
-Requirements:
-- Write 4–6 coherent paragraphs that together describe a comprehensive research methodology
-- Organize paragraphs by methodological theme (e.g., research design, data collection, experimental setup, evaluation and metrics, validation and replication) rather than by individual recommendation
-- Each paragraph should clearly connect the methods described to one or more of the recommendations, explaining why those methods are appropriate
-- Cover the following across the paragraphs: primary research design or approach, data collection methods and sources or benchmarks, analysis techniques and evaluation metrics, and validation or replication strategies
-- Do NOT use bullet points, numbered lists, or subheadings — only flowing prose paragraphs
-- Do NOT write the section heading itself — it is added automatically
-- Do NOT fabricate specific tool names or datasets not grounded in the recommendations
-- Use formal academic prose throughout
+CRITICAL INSTRUCTION — ZERO TOLERANCE FOR VAGUE OR GENERIC DESCRIPTIONS:
+You MUST specify concrete, real-world tools, software frameworks, specific models, architectures, benchmark datasets, and evaluation metrics. Never use vague placeholders like "appropriate machine learning models", "standard tools", "benchmark datasets", or "relevant metrics". Every phase must name the exact technologies and configurations to be employed.
+
+Specific Requirements across 4–6 flowing academic prose paragraphs:
+1. Research Design & System Architecture:
+   - Name the specific foundational architectures, system paradigms, and orchestration frameworks (e.g., LangGraph, PyTorch, Hugging Face Transformers, AutoGen, Ray, vLLM, DeepSpeed).
+   - Detail the workflow, coordination mechanisms, execution environment, and modular components.
+2. Specific Foundation & Baseline Models:
+   - Explicitly name target and comparator models with parameter scales and versions (e.g., LLaMA-3-70B-Instruct, Claude 3.5 Sonnet, GPT-4o, Mistral Large, BERT-large, or domain-specific equivalents).
+   - Specify model roles (e.g., primary actor, evaluator/judge, embedding models like text-embedding-3-large or BGE-large) and runtime configurations (e.g., BF16/FP16 precision, quantization formats like AWQ/INT8, temperature settings, context window allocation).
+3. Data Ingestion, Benchmarks & Datasets:
+   - Name specific, authoritative public datasets and benchmarks relevant to the topic (e.g., SWE-bench, HumanEval, GSM8K, MMLU, ARC, HotpotQA, or standard field-specific corpora).
+   - Specify concrete data collection pipelines, APIs, and curation tools (e.g., GitHub REST API, arXiv API, Semantic Scholar API, Pandas, FAISS/Chroma vector indexing).
+4. Experimental Setup, Compute & Tooling:
+   - Specify runtime execution sandboxes, containerization, and compute infrastructure (e.g., Docker/gVisor sandboxes, NVIDIA A100/H100 80GB GPUs).
+   - Specify experiment tracking, telemetry, and observability tools (e.g., Weights & Biases, MLflow, Prometheus).
+5. Evaluation Metrics, Statistical Rigor & Ablation:
+   - Define exact quantitative metrics (e.g., pass@1, pass@k, precision/recall/F1, latency P95 in ms, throughput in tokens/sec).
+   - Specify statistical significance tests and validation protocols (e.g., paired Wilcoxon signed-rank test, p < 0.05, 95% confidence intervals, 5-fold cross-validation, systematic component ablations).
+
+Style & Formatting Rules:
+- Write exactly 4–6 rich, flowing academic prose paragraphs.
+- Seamlessly integrate the specific tools, models, benchmarks, and metrics into academic prose.
+- Do NOT use bullet points, numbered lists, subheadings, or tables — write only cohesive prose paragraphs.
+- Do NOT write the section heading itself — it is added automatically.
 
 Research Question: {user_query}
 
 Recommendations (How to Cater the Research Gaps):
 {objectives_text}
-"""
+{papers_context_block}"""
 
 
-_METHODOLOGY_FLOW_PROMPT = """You are a research methodology expert. Based on the methodology description below, extract the key sequential phases of the research process.
+_METHODOLOGY_FLOW_PROMPT = """You are a research methodology expert and technical architect. Based on the methodology description below, extract the sequential operational phases of the research process into a detailed, concrete workflow.
 
-Output ONLY lines in this exact format — nothing else, no headings, no explanations:
-STEP: Phase Title | One concise sentence describing what happens in this phase (max 12 words).
+CRITICAL INSTRUCTION — MUST INCLUDE SPECIFIC TOOLS AND MODELS:
+Do NOT output generic steps like "Data Collection" or "Experimental Setup" with vague descriptions.
+Every single step description MUST explicitly mention the specific tools, frameworks, models, datasets, benchmarks, or metrics specified in the methodology (e.g., PyTorch, LangGraph, vLLM, LLaMA-3, Claude, SWE-bench, Docker, Weights & Biases, pass@1, Wilcoxon tests).
+
+Output ONLY lines in this exact format — nothing else, no headings, no explanations, no numbering in title:
+STEP: Phase Title | One concise sentence naming specific tools, models, or metrics involved (10–16 words).
 
 Rules:
-- Produce exactly 5–7 STEP lines in logical sequential order
-- Each title must be 2–5 words (e.g., "Research Design", "Data Collection", "Experimental Setup")
-- Each description must be one sentence, max 12 words, no full stop needed
+- Produce exactly 5–7 STEP lines in logical sequential execution order
+- Each title must be 2–6 words and technically descriptive (e.g., "Benchmark & Corpus Acquisition", "Agent Architecture & Framework Setup", "Model Deployment & Runtime Serving", "Experimental Execution & Telemetry", "Quantitative Benchmarking & Metrics", "Statistical Validation & Ablation")
+- Each description must be a single concise sentence (10–16 words) naming concrete tools, models, datasets, or metrics used in that phase
+- Do NOT use generic placeholders (avoid "appropriate tools", "selected models", "relevant datasets")
 - Do NOT output anything other than the STEP: lines
 
 Research Methodology:
@@ -101,11 +122,11 @@ def _steps_to_html_flowchart(steps: list[tuple[str, str]]) -> str:
     for i, (title, desc) in enumerate(steps):
         color = box_colors[i % len(box_colors)]
         rows.append(
-            f'<table style="width:72%;margin:0 auto 0 auto;border-collapse:collapse;">'
-            f'<tr><td style="background:{color};color:white;padding:5pt 12pt;text-align:center;'
+            f'<table style="width:220pt;margin:0 auto;border-collapse:collapse;">'
+            f'<tr><td style="background:{color};color:white;padding:6pt 10pt;text-align:center;'
             f'font-weight:bold;font-size:8.5pt;border:1.5pt solid {color};">'
             f'{i + 1}. {title}</td></tr>'
-            f'<tr><td style="background:#f5f3ff;color:#1e1b4b;padding:4pt 12pt;text-align:center;'
+            f'<tr><td style="background:#f5f3ff;color:#1e1b4b;padding:5pt 10pt;text-align:center;'
             f'font-size:7.5pt;border:1.5pt solid {color};border-top:none;">'
             f'{desc}</td></tr></table>'
         )
@@ -229,7 +250,7 @@ def generate_research_gap(paper_analyses: list[dict], user_query: str) -> str:
     )
 
     try:
-        llm = get_llm(task="heavy")
+        llm = get_llm(task="light")
         messages = [
             SystemMessage(content="You are an expert academic research analyst. Write clear, grounded academic prose. Never fabricate citations or facts."),
             HumanMessage(content=prompt),
@@ -256,7 +277,7 @@ def generate_research_objectives(gap_text: str, user_query: str) -> str:
     )
 
     try:
-        llm = get_llm(task="heavy")
+        llm = get_llm(task="light")
         messages = [
             SystemMessage(content="You are an expert academic research analyst. Write clear, grounded academic prose. Never fabricate citations or facts."),
             HumanMessage(content=prompt),
@@ -272,29 +293,67 @@ def generate_research_objectives(gap_text: str, user_query: str) -> str:
     return f"\n\n## How to Cater the Research Gaps\n\n{objectives_text}"
 
 
-def generate_methodology(objectives_text: str, user_query: str) -> str:
+def generate_methodology(
+    objectives_text: str,
+    user_query: str,
+    paper_analyses: list[dict] | None = None,
+) -> str:
     """
-    Use the LLM to generate a Methodology section with per-objective research
-    methods that mirror the numbered recommendations. Returns Markdown with heading.
+    Use the LLM to generate a Methodology section with specific tools, models,
+    frameworks, benchmarks, and experimental procedures. Returns Markdown with heading.
     """
+    papers_context_block = ""
+    if paper_analyses:
+        context_lines = []
+        for i, p in enumerate(paper_analyses[:10], 1):
+            title = (p.get("title") or "Untitled").strip()
+            tech = (p.get("methodology") or "").strip()
+            findings = (p.get("findings") or "").strip()
+            if tech or findings:
+                context_lines.append(
+                    f"[{i}] {title}\n"
+                    f"    Techniques/Tools : {tech[:250]}\n"
+                    f"    Findings/Metrics : {findings[:200]}"
+                )
+        if context_lines:
+            papers_context_block = (
+                "\nReviewed Literature Techniques & Baselines:\n"
+                + "\n\n".join(context_lines)
+            )
+
     prompt = _METHODOLOGY_PROMPT.format(
         user_query=user_query,
-        objectives_text=objectives_text,
+        objectives_text=objectives_text or "Address the empirical limitations and research gaps identified in the literature through targeted, rigorous technical implementation.",
+        papers_context_block=papers_context_block,
     )
 
     try:
         llm = get_llm(task="heavy")
         messages = [
-            SystemMessage(content="You are an expert academic research analyst. Write clear, grounded academic prose. Never fabricate citations or facts."),
+            SystemMessage(
+                content=(
+                    "You are an expert academic research analyst and technical architect. "
+                    "Write authoritative, highly concrete academic prose specifying exact tools, "
+                    "models, frameworks, datasets, and metrics. Never fabricate citations."
+                )
+            ),
             HumanMessage(content=prompt),
         ]
         response = llm.invoke(messages)
         methodology_text = extract_text(response.content).strip()
         if not methodology_text:
-            methodology_text = "Each objective should be pursued using rigorous empirical methods appropriate to the research domain, with systematic validation and reproducibility as guiding principles."
+            methodology_text = (
+                "The research methodology employs a multi-phase empirical design implemented in PyTorch and LangGraph, "
+                "evaluating frontier and open-weight models (including LLaMA-3-70B and Claude 3.5 Sonnet) against standardized "
+                "benchmarks such as SWE-bench and HumanEval with telemetry tracked in Weights & Biases."
+            )
     except Exception as e:
         print(f"[ReportWriter] ⚠ Methodology generation failed: {e}")
-        methodology_text = "Each objective should be pursued using rigorous empirical methods appropriate to the research domain, with systematic validation and reproducibility as guiding principles."
+        methodology_text = (
+            "The research methodology employs a multi-phase empirical design implemented in PyTorch and LangGraph, "
+            "evaluating frontier and open-weight models (including LLaMA-3-70B and Claude 3.5 Sonnet) against standardized "
+            "benchmarks such as SWE-bench and HumanEval with telemetry tracked in Weights & Biases."
+        )
 
     return f"\n\n## Methodology\n\n{methodology_text}"
 
@@ -311,7 +370,13 @@ def generate_methodology_flowchart(methodology_text: str) -> str:
     try:
         llm = get_llm(task="light")
         messages = [
-            SystemMessage(content="You are a research methodology expert. Output ONLY the STEP: lines as instructed. No extra text."),
+            SystemMessage(
+                content=(
+                    "You are a research methodology expert and technical architect. "
+                    "Extract operational phases with specific tools, models, datasets, and metrics. "
+                    "Output ONLY the STEP: lines as instructed. No extra text."
+                )
+            ),
             HumanMessage(content=prompt),
         ]
         response = llm.invoke(messages)
@@ -327,16 +392,17 @@ def generate_methodology_flowchart(methodology_text: str) -> str:
                     if title and desc:
                         steps.append((title, desc))
     except Exception as e:
-        print(f"[ReportWriter] \u26a0 Methodology flowchart LLM step failed: {e}")
+        print(f"[ReportWriter] ⚠ Methodology flowchart LLM step failed: {e}")
 
-    # Fallback: generic phases if LLM failed or returned nothing parseable
+    # Fallback: concrete, tool- and model-specific phases if LLM failed or returned nothing parseable
     if not steps:
         steps = [
-            ("Research Design", "Define objectives, scope, and the overall research approach"),
-            ("Data Collection", "Gather relevant datasets, benchmarks, and empirical sources"),
-            ("Experimental Setup", "Configure experimental conditions and control variables"),
-            ("Analysis & Evaluation", "Apply analysis techniques and measure against defined metrics"),
-            ("Validation & Replication", "Validate results through cross-validation and independent replication"),
+            ("Benchmark & Dataset Acquisition", "Curate standardized benchmarks and evaluation corpora via Hugging Face and REST APIs"),
+            ("Model & Pipeline Architecture", "Implement core agent workflows using PyTorch, LangGraph, and transformer backbones"),
+            ("Sandboxed Runtime Deployment", "Deploy models with vLLM inference engine within secure containerized Docker sandboxes"),
+            ("Experimental Telemetry & Execution", "Execute benchmark test suites while tracking latency and tokens via Weights & Biases"),
+            ("Metric Evaluation & Statistical Testing", "Calculate pass@k and F1 metrics with paired Wilcoxon signed-rank significance tests"),
+            ("Component Ablation & Validation", "Conduct systematic ablation experiments to validate individual architectural contributions"),
         ]
 
     return "\n\n" + _steps_to_html_flowchart(steps)
@@ -344,8 +410,9 @@ def generate_methodology_flowchart(methodology_text: str) -> str:
 
 def run(state: ResearchState) -> ResearchState:
     """
-    Report Writer node — produces a 7-column Markdown table followed by
-    an LLM-synthesized Research Gap section covering all reviewed papers.
+    Report Writer node — produces a 7-column Markdown table, Research Gap,
+    How to Cater the Research Gaps, Methodology prose, and a Methodology
+    Flow Diagram with concrete tools, models, and specifications.
 
     Args:
         state: Current ResearchState with 'user_query' and 'paper_analyses'.
@@ -358,29 +425,26 @@ def run(state: ResearchState) -> ResearchState:
 
     print(f"[ReportWriter] Building report for '{user_query}' ({len(paper_analyses)} papers)")
 
-    # Document title block
+    # Document title block (no LLM needed)
     title_md = f"# {user_query}\n\n---"
-
     table_md = generate_markdown_table(paper_analyses)
 
+    # ── Phase 1: Synthesize Research Gap from reviewed literature ─────────────
     print(f"[ReportWriter] Generating summarized Research Gap section...")
     gap_md = generate_research_gap(paper_analyses, user_query)
-
-    # Strip the heading prefix to pass only the prose to the objectives generator
     gap_prose = re.sub(r"^\s*##\s*Research Gap\s*\n+", "", gap_md).strip()
 
+    # ── Phase 2: Formulate actionable objectives catering to the gaps ─────────
     print(f"[ReportWriter] Generating 'How to Cater the Research Gaps' section...")
     objectives_md = generate_research_objectives(gap_prose, user_query)
-
-    # Strip heading prefix — pass only the numbered recommendations to the methodology generator
     objectives_prose = re.sub(r"^\s*##\s*How to Cater the Research Gaps\s*\n+", "", objectives_md).strip()
 
-    print(f"[ReportWriter] Generating Methodology section...")
-    methodology_md = generate_methodology(objectives_prose, user_query)
-
-    # Strip heading to get bare prose for the flowchart step extractor
+    # ── Phase 3: Construct comprehensive technical Methodology ────────────────
+    print(f"[ReportWriter] Generating Methodology section with specific tools and models...")
+    methodology_md = generate_methodology(objectives_prose, user_query, paper_analyses=paper_analyses)
     methodology_prose = re.sub(r"^\s*##\s*Methodology\s*\n+", "", methodology_md).strip()
 
+    # ── Phase 4: Extract operational workflow into flowchart diagram ──────────
     print(f"[ReportWriter] Generating Methodology flow diagram...")
     flowchart_html = generate_methodology_flowchart(methodology_prose)
 
