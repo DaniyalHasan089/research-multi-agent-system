@@ -6,14 +6,15 @@ Produces:
   2. A summarized "Research Gap" section written by the LLM.
   3. A "How to Cater the Research Gaps" section (8–10 priority-ordered recommendations).
   4. A "Methodology" section with per-objective research methods.
+  5. A "Methodology Flow Diagram" HTML visual of sequential research phases.
+  6. An "Estimated Research Timeline" HTML table with per-phase durations and deliverables.
 
 Guarantees:
   - Exactly 7 columns with zero column shifts or unclosed brackets.
   - Every cell sanitized (no pipe '|' or newline characters).
   - No cell is empty, null, 'Unknown', or 'N/A'.
 
-Output is written to ResearchState: report_markdown
-"""
+Output is written to ResearchState: report_markdown"""
 
 import re
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -109,6 +110,30 @@ Rules:
 - Do NOT output anything other than the STEP: lines
 
 Research Methodology:
+{methodology_text}
+"""
+
+
+_METHODOLOGY_TIMELINE_PROMPT = """You are an expert research project planner and principal investigator. Based on the proposed methodology description below, produce a realistic week-by-week timeline for executing the research project.
+
+CRITICAL INSTRUCTION — BE CONCRETE AND SPECIFIC:
+- Every phase must name the exact tools, frameworks, models, datasets, benchmarks, or metrics involved (e.g., PyTorch, LangGraph, vLLM, LLaMA-3-70B, SWE-bench, Weights & Biases, pass@k, Docker).
+- Do NOT use vague language like "setup environment", "collect data", "run experiments", or "analyze results" without naming the specific artifacts.
+- Duration estimates must be realistic for a rigorous academic research project.
+
+Output ONLY lines in this exact format — one line per phase, nothing else:
+PHASE: Phase Name | Duration (e.g., Weeks 1–2) | Key Deliverables | Specific Tools/Models/Benchmarks Used
+
+Rules:
+- Produce exactly 5–8 PHASE lines in sequential chronological order
+- Phase Name: 2–6 words, technically descriptive (e.g., "Literature & Benchmark Setup", "Model Deployment & Inference", "Baseline Evaluation", "Core Experiment Execution", "Ablation & Sensitivity Analysis", "Statistical Validation", "Manuscript Preparation")
+- Duration: realistic week range (e.g., "Weeks 1–2", "Weeks 3–5", "Weeks 6–8")
+- Key Deliverables: 1–2 concrete outputs (e.g., "Curated SWE-bench subset; FAISS index built", "Baseline pass@1 scores for GPT-4o and LLaMA-3-70B")
+- Tools/Models/Benchmarks: comma-separated specific names (e.g., "Hugging Face Datasets, arXiv API, FAISS")
+- Pipe '|' is used as the field separator — do NOT use '|' within any field
+- Do NOT output anything other than the PHASE: lines
+
+Proposed Methodology:
 {methodology_text}
 """
 
@@ -408,6 +433,100 @@ def generate_methodology_flowchart(methodology_text: str) -> str:
     return "\n\n" + _steps_to_html_flowchart(steps)
 
 
+def generate_methodology_timeline(methodology_text: str) -> str:
+    """
+    Ask the LLM to extract a phase-by-phase estimated timeline from the methodology
+    prose, then render it as a styled HTML table.
+    Returns a raw HTML string (markdown passthrough).
+    """
+    prompt = _METHODOLOGY_TIMELINE_PROMPT.format(methodology_text=methodology_text)
+
+    # Each row: (phase_name, duration, deliverables, tools)
+    rows: list[tuple[str, str, str, str]] = []
+    try:
+        llm = get_llm(task="light")
+        messages = [
+            SystemMessage(
+                content=(
+                    "You are an expert research project planner. "
+                    "Output ONLY the PHASE: lines as instructed. No extra text."
+                )
+            ),
+            HumanMessage(content=prompt),
+        ]
+        response = llm.invoke(messages)
+        raw = extract_text(response.content).strip()
+        for line in raw.splitlines():
+            line = line.strip()
+            if line.upper().startswith("PHASE:"):
+                body = line[6:].strip()
+                parts = [p.strip() for p in body.split("|")]
+                if len(parts) == 4 and all(parts):
+                    rows.append((parts[0], parts[1], parts[2], parts[3]))
+    except Exception as e:
+        print(f"[ReportWriter] ⚠ Timeline generation failed: {e}")
+
+    # Fallback: concrete, tool-specific phases if LLM failed or returned nothing parseable
+    if not rows:
+        rows = [
+            ("Literature & Benchmark Setup",   "Weeks 1–2",  "Curated dataset via arXiv/Semantic Scholar API; FAISS index built",            "arXiv API, Semantic Scholar API, FAISS, Pandas"),
+            ("Model Deployment & Serving",      "Weeks 3–4",  "vLLM inference endpoints live for LLaMA-3-70B & Claude 3.5 Sonnet",           "vLLM, Docker, NVIDIA A100, Hugging Face Hub"),
+            ("Baseline Evaluation",             "Weeks 5–6",  "Baseline pass@1 & F1 scores on SWE-bench and HumanEval",                       "SWE-bench, HumanEval, PyTorch, Weights & Biases"),
+            ("Core Experiment Execution",       "Weeks 7–9",  "Full experimental run logs; LangGraph workflow telemetry captured",            "LangGraph, AutoGen, Weights & Biases, Prometheus"),
+            ("Ablation & Sensitivity Analysis", "Weeks 10–11", "Per-component ablation tables; quantization impact on latency P95",           "PyTorch, MLflow, AWQ/INT8 quantization"),
+            ("Statistical Validation",          "Weeks 12–13", "Wilcoxon signed-rank test results; 95% CI for all primary metrics",           "SciPy, statsmodels, pandas"),
+            ("Manuscript Preparation",          "Weeks 14–16", "Camera-ready paper draft; reproducibility package on GitHub",                 "LaTeX, GitHub, arXiv submission portal"),
+        ]
+
+    return "\n\n" + _timeline_to_html(rows)
+
+
+def _timeline_to_html(rows: list[tuple[str, str, str, str]]) -> str:
+    """Render a list of (phase, duration, deliverables, tools) tuples as a styled HTML table."""
+    header_color = "#4f46e5"
+    alt_row_color = "#f5f3ff"
+    border_color = "#e5e7eb"
+
+    header_html = (
+        f'<table style="width:100%;border-collapse:collapse;margin:6pt 0;font-size:7.5pt;">'
+        f'<thead>'
+        f'<tr>'
+        f'<th style="background:{header_color};color:white;padding:6pt 8pt;text-align:left;font-weight:bold;border:1pt solid {header_color};width:20%;">#&nbsp; Phase</th>'
+        f'<th style="background:{header_color};color:white;padding:6pt 8pt;text-align:left;font-weight:bold;border:1pt solid {header_color};width:12%;">Duration</th>'
+        f'<th style="background:{header_color};color:white;padding:6pt 8pt;text-align:left;font-weight:bold;border:1pt solid {header_color};width:34%;">Key Deliverables</th>'
+        f'<th style="background:{header_color};color:white;padding:6pt 8pt;text-align:left;font-weight:bold;border:1pt solid {header_color};width:34%;">Tools / Models / Benchmarks</th>'
+        f'</tr>'
+        f'</thead><tbody>'
+    )
+
+    rows_html = []
+    for i, (phase, duration, deliverables, tools) in enumerate(rows):
+        bg = alt_row_color if i % 2 == 1 else "#ffffff"
+        rows_html.append(
+            f'<tr style="background:{bg};">'
+            f'<td style="padding:5pt 8pt;border:1pt solid {border_color};font-weight:bold;color:#312e81;">'
+            f'{i + 1}. {phase}</td>'
+            f'<td style="padding:5pt 8pt;border:1pt solid {border_color};text-align:center;color:#1e1b4b;white-space:nowrap;">'
+            f'{duration}</td>'
+            f'<td style="padding:5pt 8pt;border:1pt solid {border_color};color:#1f2937;">'
+            f'{deliverables}</td>'
+            f'<td style="padding:5pt 8pt;border:1pt solid {border_color};color:#374151;font-style:italic;">'
+            f'{tools}</td>'
+            f'</tr>'
+        )
+
+    footer_html = "</tbody></table>"
+
+    title_html = (
+        '<div style="margin:14pt 0 4pt 0;page-break-inside:avoid;">'
+        '<p style="font-weight:bold;font-size:9pt;color:#312e81;'
+        'border-bottom:1pt solid #e5e7eb;padding-bottom:3pt;margin-bottom:8pt;">'
+        'Estimated Research Timeline</p>'
+    )
+
+    return title_html + header_html + "".join(rows_html) + footer_html + "</div>"
+
+
 def run(state: ResearchState) -> ResearchState:
     """
     Report Writer node — produces a 7-column Markdown table, Research Gap,
@@ -448,7 +567,15 @@ def run(state: ResearchState) -> ResearchState:
     print(f"[ReportWriter] Generating Methodology flow diagram...")
     flowchart_html = generate_methodology_flowchart(methodology_prose)
 
-    report_markdown = title_md + "\n\n" + table_md + gap_md + objectives_md + methodology_md + flowchart_html
+    # ── Phase 5: Generate estimated research timeline ─────────────────────────
+    print(f"[ReportWriter] Generating Estimated Research Timeline...")
+    timeline_html = generate_methodology_timeline(methodology_prose)
+
+    report_markdown = (
+        title_md + "\n\n" + table_md
+        + gap_md + objectives_md + methodology_md
+        + flowchart_html + timeline_html
+    )
     print(f"[ReportWriter] Report complete ({len(report_markdown)} chars)")
 
     return {**state, "report_markdown": report_markdown}
