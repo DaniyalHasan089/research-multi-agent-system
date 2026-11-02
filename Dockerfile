@@ -1,8 +1,6 @@
 # ── Stage 1: Builder ──────────────────────────────────────────────────────────
 # Install Python dependencies in a separate stage to keep the final image lean.
-FROM python:3.11-slim AS builder
-
-WORKDIR /app
+FROM python:3.11-slim AS builderWORKDIR /app
 
 # Retry apt on transient network failures (common on some cloud/on-prem servers)
 RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
