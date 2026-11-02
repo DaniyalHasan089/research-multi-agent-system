@@ -4,6 +4,10 @@ FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
+# Retry apt on transient network failures (common on some cloud/on-prem servers)
+RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
+    && echo 'Acquire::http::Timeout "30";' >> /etc/apt/apt.conf.d/80-retries
+
 # Install build tools needed to compile some Python packages (e.g. cffi, cryptography)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
@@ -22,22 +26,20 @@ FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 
+# Retry apt on transient network failures
+RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
+    && echo 'Acquire::http::Timeout "30";' >> /etc/apt/apt.conf.d/80-retries
+
 # ── System libraries required by xhtml2pdf / ReportLab for PDF generation ────
-#    These are the same libs WeasyPrint would need on Linux as well.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # Font rendering
     libpango-1.0-0 \
     libpangoft2-1.0-0 \
     libpangocairo-1.0-0 \
-    # Cairo / GDK-pixbuf (image rendering inside PDFs)
     libcairo2 \
-    libgdk-pixbuf2.0-0 \
-    # Shared mime types (needed by GLib)
+    libgdk-pixbuf-2.0-0 \
     shared-mime-info \
-    # Font packages so PDFs render with proper glyphs
     fonts-dejavu-core \
     fonts-liberation \
-    # curl is useful for the Docker health-check
     curl \
     && rm -rf /var/lib/apt/lists/*
 
